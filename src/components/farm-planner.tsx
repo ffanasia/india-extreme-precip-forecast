@@ -15,15 +15,19 @@ import {
   Section,
   StageTimeline,
   WeatherTable,
+  WhatGrows,
 } from "@/components/farm-parts"
+import { LanguagePicker, TranslationNote, useLanguage } from "@/components/language"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { buildPlan } from "@/lib/agro/advisor"
-import { CROPS, cropById } from "@/lib/agro/crops"
+import { CROPS, cropById, cropName, cropSeason } from "@/lib/agro/crops"
+import { suggestCrops } from "@/lib/agro/regions"
 import type { FarmResponse } from "@/lib/agro/types"
-import { formatIssued, todayInKolkata } from "@/lib/dates"
+import { todayInKolkata } from "@/lib/dates"
 import { CITIES } from "@/lib/domain"
+import { placeName, stateName } from "@/lib/plain"
 import type { DeskResponse } from "@/lib/types"
 
 const CITY_KEY = "varsha.city"
@@ -53,12 +57,9 @@ function readSetup(): Setup {
   }
 }
 
-const CITY_ITEMS = [...CITIES]
-  .sort((a, b) => a.name.localeCompare(b.name))
-  .map((city) => ({ value: city.id, label: `${city.name}, ${city.state}` }))
-const CROP_ITEMS = CROPS.map((crop) => ({ value: crop.id, label: `${crop.name} (${crop.local}) · ${crop.season}` }))
 
 export function FarmPlanner() {
+  const { tr } = useLanguage()
   const [setup, setSetup] = useState<Setup | null>(null)
   const [farm, setFarm] = useState<FarmResponse | null>(null)
   const [desk, setDesk] = useState<DeskResponse | null>(null)
@@ -94,8 +95,7 @@ export function FarmPlanner() {
       if (!response.ok) throw new Error(body.error ?? "Farm weather could not be loaded")
       setFarm(body)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Farm weather could not be loaded")
-    } finally {
+      setError(caught instanceof Error ? caught.message : "Farm weather could not be loaded")    } finally {
       setLoading(false)
     }
   }
@@ -130,14 +130,45 @@ export function FarmPlanner() {
       today: farm.today,
       lastIrrigated: setup.irrigated || null,
       heavyChance: heavy ? new Map(heavy.map((day) => [day.date, day.heavyChance])) : undefined,
+      tr,
     })
-  }, [crop, desk, farm, setup])
+  }, [crop, desk, farm, setup, tr])
+
+  const cityItems = useMemo(
+    () =>
+      CITIES.map((city) => ({ value: city.id, label: `${placeName(city.id, city.name, tr)}, ${stateName(city.state, tr)}` })).sort(
+        (a, b) => a.label.localeCompare(b.label, tr.locale),
+      ),
+    [tr],
+  )
+  const cropItems = useMemo(
+    () =>
+      CROPS.map((item) => ({
+        value: item.id,
+        label:
+          tr.lang === "en"
+            ? `${item.name} (${item.local}) · ${item.season}`
+            : `${cropName(item, tr)} · ${cropSeason(item, tr)}`,
+      })),
+    [tr],
+  )
+
+  const annualRain = desk?.cities.find((city) => city.id === cityId)?.era5.meanAnnual ?? null
+  const suggestions = useMemo(() => {
+    if (!cityId) return null
+    const temps = plan?.days.map((day) => day.weather.tMean).filter((value): value is number => value != null) ?? []
+    const meanTemp = temps.length ? temps.reduce((sum, value) => sum + value, 0) / temps.length : null
+    const month = Number((farm?.today ?? todayInKolkata()).slice(5, 7))
+    return suggestCrops(cityId, month, meanTemp, annualRain)
+  }, [annualRain, cityId, farm?.today, plan])
 
   const activeDate = plan?.days.some((day) => day.date === selectedDate) ? selectedDate : plan?.days[0]?.date ?? null
   const activeDay = plan?.days.find((day) => day.date === activeDate) ?? null
   const update = (patch: Partial<Setup>) => setSetup((current) => (current ? { ...current, ...patch } : current))
   const today = farm?.today ?? todayInKolkata()
-  const cityName = CITIES.find((item) => item.id === cityId)?.name
+  const cityRecord = CITIES.find((item) => item.id === cityId)
+  const cityName = cityRecord ? placeName(cityRecord.id, cityRecord.name, tr) : null
+  const startLabel = crop.startLabel
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -145,32 +176,34 @@ export function FarmPlanner() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-3 px-4 py-3">
           <div>
             <p className="font-heading text-[1.7rem] leading-none italic">Varsha</p>
-            <p className="mt-1 text-[11px] tracking-[0.18em] text-muted-foreground uppercase">Farm planner</p>
+            <p className="mt-1 text-[11px] tracking-[0.18em] text-muted-foreground uppercase">{tr.t("app.farmTagline")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <LanguagePicker />
             <Button variant="outline" size="sm" onClick={() => cityId && void load(cityId, true)} disabled={loading || !cityId}>
               <RefreshCw className={loading ? "animate-spin" : ""} />
-              Refresh
+              {tr.t("ui.refresh")}
             </Button>
             <Link href="/simple" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              Rain guide
+              {tr.t("nav.rain")}
             </Link>
             <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              Detailed desk
+              {tr.t("nav.desk")}
             </Link>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 py-5">
+        <TranslationNote />
         <section className="grid gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/10 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Place">
-            <Select items={CITY_ITEMS} value={setup?.city ?? null} onValueChange={(value) => typeof value === "string" && update({ city: value })}>
-              <SelectTrigger className="h-10 w-full" aria-label="Place">
-                <SelectValue placeholder="Choose a place" />
+          <Field label={tr.t("farm.place")}>
+            <Select items={cityItems} value={setup?.city ?? null} onValueChange={(value) => typeof value === "string" && update({ city: value })}>
+              <SelectTrigger className="h-10 w-full" aria-label={tr.t("farm.place")}>
+                <SelectValue placeholder={tr.t("farm.choosePlace")} />
               </SelectTrigger>
               <SelectContent>
-                {CITY_ITEMS.map((item) => (
+                {cityItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>
@@ -178,13 +211,13 @@ export function FarmPlanner() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Crop">
-            <Select items={CROP_ITEMS} value={setup?.crop ?? null} onValueChange={(value) => typeof value === "string" && update({ crop: value })}>
-              <SelectTrigger className="h-10 w-full" aria-label="Crop">
-                <SelectValue placeholder="Choose a crop" />
+          <Field label={tr.t("farm.crop")}>
+            <Select items={cropItems} value={setup?.crop ?? null} onValueChange={(value) => typeof value === "string" && update({ crop: value })}>
+              <SelectTrigger className="h-10 w-full" aria-label={tr.t("farm.crop")}>
+                <SelectValue placeholder={tr.t("farm.chooseCrop")} />
               </SelectTrigger>
               <SelectContent>
-                {CROP_ITEMS.map((item) => (
+                {cropItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>
@@ -192,7 +225,7 @@ export function FarmPlanner() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label={`${crop.startLabel[0].toUpperCase()}${crop.startLabel.slice(1)} date`}>
+          <Field label={tr.t(`field.${startLabel}`)}>
             <div className="flex gap-2">
               <Input
                 type="date"
@@ -200,16 +233,16 @@ export function FarmPlanner() {
                 value={setup?.sown ?? ""}
                 max={addYears(today, 1)}
                 onChange={(event) => update({ sown: event.target.value })}
-                aria-label={`${crop.startLabel} date`}
+                aria-label={tr.t(`field.${startLabel}`)}
               />
               {setup?.sown && (
                 <Button variant="ghost" className="h-10" onClick={() => update({ sown: "" })}>
-                  Not sown
+                  {tr.t("farm.notSown")}
                 </Button>
               )}
             </div>
           </Field>
-          <Field label="Last irrigated (optional)">
+          <Field label={tr.t("farm.lastIrrigated")}>
             <div className="flex gap-2">
               <Input
                 type="date"
@@ -217,24 +250,21 @@ export function FarmPlanner() {
                 value={setup?.irrigated ?? ""}
                 max={today}
                 onChange={(event) => update({ irrigated: event.target.value })}
-                aria-label="Last irrigated"
+                aria-label={tr.t("farm.lastIrrigated")}
               />
               {setup?.irrigated && (
                 <Button variant="ghost" className="h-10" onClick={() => update({ irrigated: "" })}>
-                  Clear
+                  {tr.t("farm.clear")}
                 </Button>
               )}
             </div>
           </Field>
-          <p className="text-xs leading-5 text-muted-foreground sm:col-span-2 lg:col-span-4">
-            Leave the {crop.startLabel} date empty to plan sowing. Soil moisture comes from a weather model that does not know
-            about your own irrigation, so adding the last irrigation date keeps the water advice honest.
-          </p>
+          <p className="text-xs leading-5 text-muted-foreground sm:col-span-2 lg:col-span-4">{tr.t("farm.setupNote")}</p>
         </section>
 
         {error && (
           <div className="rounded-xl border border-vermillion/40 px-4 py-3 text-sm text-vermillion">
-            {error}. Check your connection and press Refresh.
+            {tr.t("farm.loadError")}
           </div>
         )}
 
@@ -243,69 +273,80 @@ export function FarmPlanner() {
             <div className="h-5 w-1/3 animate-pulse rounded bg-muted" />
             <div className="h-4 w-full animate-pulse rounded bg-muted" />
             <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-            <p className="pt-2 text-sm text-muted-foreground">
-              Reading hourly weather, soil moisture, and air quality{cityName ? ` for ${cityName}` : ""}.
-            </p>
+            <p className="pt-2 text-sm text-muted-foreground">{tr.t("farm.loading", { city: cityName ?? "" })}</p>
           </div>
         )}
 
         {plan && farm && (
           <>
-            <Section title={`This week for your ${crop.name.toLowerCase()} near ${farm.point.name}`}>
+            <Section
+              title={tr.t("farm.thisWeek", {
+                crop: tr.lower(cropName(crop, tr)),
+                city: placeName(farm.point.id, farm.point.name, tr),
+              })}
+            >
               <Insights plan={plan} />
             </Section>
 
-            <Section title="Best day for each job">
-              <BestDays plan={plan} />
+            <Section title={tr.t("farm.bestJobs")}>
+              <BestDays plan={plan} tr={tr} />
             </Section>
 
             <Section
-              title="Day-by-day plan"
-              action={<span className="text-xs text-muted-foreground">Select a day for the reasons</span>}
+              title={tr.t("farm.dayPlan")}
+              action={<span className="text-xs text-muted-foreground">{tr.t("farm.selectDay")}</span>}
             >
-              <Calendar plan={plan} selected={activeDate} onSelect={setSelectedDate} />
+              <Calendar plan={plan} selected={activeDate} onSelect={setSelectedDate} tr={tr} />
               {activeDay && (
                 <div className="mt-4 border-t border-border pt-4">
-                  <DayDetail day={activeDay} />
+                  <DayDetail day={activeDay} crop={crop} tr={tr} />
                 </div>
               )}
             </Section>
 
             <div className="grid gap-5 lg:grid-cols-2">
-              <Section title="Crop stage">
-                <StageTimeline plan={plan} today={today} />
+              <Section title={tr.t("farm.stage")}>
+                <StageTimeline plan={plan} today={today} tr={tr} />
               </Section>
-              <Section title="Alerts">
-                <Alerts plan={plan} />
+              <Section title={tr.t("farm.alerts")}>
+                <Alerts plan={plan} tr={tr} />
               </Section>
             </div>
+
+            {suggestions && (
+              <Section title={tr.t("grow.title", { city: placeName(farm.point.id, farm.point.name, tr) })}>
+                <WhatGrows
+                  suggestions={suggestions}
+                  annualRainMm={annualRain}
+                  currentCrop={crop.id}
+                  onPlan={(id) => {
+                    update({ crop: id, sown: "", irrigated: "" })
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                  }}
+                  tr={tr}
+                />
+              </Section>
+            )}
 
             <div className="grid gap-5 lg:grid-cols-2">
-              <Section title="Air pollution and crop stress">
-                <AirWeek days={plan.days} />
+              <Section title={tr.t("farm.air")}>
+                <AirWeek days={plan.days} tr={tr} />
               </Section>
-              <Section title="Weather behind the plan">
-                <WeatherTable days={plan.days} />
+              <Section title={tr.t("farm.weather")}>
+                <WeatherTable days={plan.days} tr={tr} />
               </Section>
             </div>
 
-            <Section title="Air quality across mainland India today">
-              <AirAcrossIndia overview={farm.overview} selectedId={farm.point.id} onSelect={(id) => update({ city: id })} />
+            <Section title={tr.t("farm.airIndia")}>
+              <AirAcrossIndia overview={farm.overview} selectedId={farm.point.id} onSelect={(id) => update({ city: id })} tr={tr} />
             </Section>
 
             <footer className="space-y-2 pb-6 text-xs leading-5 text-muted-foreground">
+              <p>{tr.t("farm.sources")}</p>
+              <p>{tr.t("farm.disclaimer")}</p>
               <p>
-                Hourly weather, soil moisture, and evaporation come from the Open-Meteo forecast (ECMWF and NCEP models). Air
-                quality comes from the Copernicus CAMS global forecast. The heavy-rain chance comes from the 80-member ensemble
-                on the detailed desk. Crop stages, water use, and thresholds are typical values for Indian varieties under
-                medium loam soil; your variety, soil, and local practice can shift them by days.
-              </p>
-              <p>
-                This is planning guidance, not a prescription. Follow the label for any pesticide, and check your district
-                agromet advisory (Meghdoot app) and Krishi Vigyan Kendra for local recommendations.
-              </p>
-              <p>
-                Updated {formatIssued(farm.generatedAt)} IST{farm.errors.length ? ` · ${farm.errors.join(" · ")}` : ""}.
+                {tr.t("farm.updated", { time: tr.issued(farm.generatedAt) })}
+                {farm.errors.length ? ` · ${farm.errors.join(" · ")}` : ""}
               </p>
             </footer>
           </>

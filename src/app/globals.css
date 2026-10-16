@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-plex), "IBM Plex Sans", sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
-  --font-heading: var(--font-fraunces), "Iowan Old Style", Palatino, serif;
+  --font-sans: var(--font-plex), "IBM Plex Sans", var(--font-deva), var(--font-gujr), var(--font-guru), var(--font-beng), var(--font-taml), var(--font-telu), var(--font-knda), var(--font-mlym), sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, var(--font-deva), var(--font-gujr), var(--font-guru), var(--font-beng), var(--font-taml), var(--font-telu), var(--font-knda), var(--font-mlym), monospace;
+  --font-heading: var(--font-fraunces), "Iowan Old Style", Palatino, var(--font-deva), var(--font-gujr), var(--font-guru), var(--font-beng), var(--font-taml), var(--font-telu), var(--font-knda), var(--font-mlym), serif;
   --color-saffron: #e3a008;
   --color-vermillion: #e24a2e;
   --color-monsoon: #7fa89a;

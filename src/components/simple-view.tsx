@@ -8,24 +8,28 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatDay, formatIssued } from "@/lib/dates"
+import { LanguagePicker, TranslationNote, useLanguage } from "@/components/language"
+import type { Translator } from "@/lib/i18n"
 import {
-  DAY_WORDS,
   RISK_COLOR,
-  RISK_WORDS,
   adviceFor,
   agreement,
   dayKind,
+  dayWord,
   futureOutlook,
   groundStatus,
   headline,
   nearestCity,
+  placeName,
   riskLevel,
+  riskWord,
   roundedMm,
   sameWeekHistory,
+  stateName,
   typicalYear,
   weekLine,
   type DayKind,
+  type RiskLevel,
 } from "@/lib/plain"
 import type { CityDesk, DeskResponse } from "@/lib/types"
 
@@ -41,12 +45,13 @@ const DAY_COLOR: Record<DayKind, string> = {
 }
 
 export function SimpleView() {
+  const { tr } = useLanguage()
   const [data, setData] = useState<DeskResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [chosenId, setChosenId] = useState<string | null>(null)
   const [locating, setLocating] = useState(false)
-  const [locationNote, setLocationNote] = useState<string | null>(null)
+  const [locationNote, setLocationNote] = useState<((tr: Translator) => string) | null>(null)
 
   async function load(refresh = false) {
     setLoading(true)
@@ -84,7 +89,7 @@ export function SimpleView() {
   function locate() {
     if (!data) return
     if (!("geolocation" in navigator)) {
-      setLocationNote("This browser cannot share your location. Pick a place from the list instead.")
+      setLocationNote(() => (t: Translator) => t.t("simple.locUnsupported"))
       return
     }
     setLocating(true)
@@ -95,19 +100,19 @@ export function SimpleView() {
         const found = nearestCity(data.cities, position.coords.latitude, position.coords.longitude)
         if (!found) return
         if (found.km > 400) {
-          setLocationNote("You seem to be outside mainland India. Pick a place from the list.")
+          setLocationNote(() => (t: Translator) => t.t("simple.locOutside"))
           return
         }
         choose(found.city.id)
-        setLocationNote(
-          found.km > 120
-            ? `The nearest forecast point is ${found.city.name}, about ${Math.round(found.km)} km away. Rain at your farm can differ.`
-            : `Showing ${found.city.name}, about ${Math.round(found.km)} km from you.`,
+        const { id, name } = found.city
+        const km = Math.round(found.km)
+        setLocationNote(() => (t: Translator) =>
+          t.t(found.km > 120 ? "simple.locFar" : "simple.locNear", { city: placeName(id, name, t), km }),
         )
       },
       () => {
         setLocating(false)
-        setLocationNote("Location was not shared. Pick a place from the list instead.")
+        setLocationNote(() => (t: Translator) => t.t("simple.locDenied"))
       },
       { timeout: 10_000, maximumAge: 600_000 },
     )
@@ -127,10 +132,13 @@ export function SimpleView() {
 
   const items = useMemo(
     () =>
-      [...(data?.cities ?? [])]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((item) => ({ value: item.id, label: `${item.name}, ${item.state}` })),
-    [data],
+      (data?.cities ?? [])
+        .map((item) => ({
+          value: item.id,
+          label: `${placeName(item.id, item.name, tr)}, ${stateName(item.state, tr)}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, tr.locale)),
+    [data, tr],
   )
 
   return (
@@ -139,24 +147,26 @@ export function SimpleView() {
         <div className="mx-auto flex max-w-3xl flex-wrap items-end justify-between gap-3 px-4 py-3">
           <div>
             <p className="font-heading text-[1.7rem] leading-none italic">Varsha</p>
-            <p className="mt-1 text-[11px] tracking-[0.18em] text-muted-foreground uppercase">Heavy rain guide</p>
+            <p className="mt-1 text-[11px] tracking-[0.18em] text-muted-foreground uppercase">{tr.t("app.rainTagline")}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <LanguagePicker />
             <Button variant="outline" size="sm" onClick={() => void load(true)} disabled={loading}>
               <RefreshCw className={loading ? "animate-spin" : ""} />
-              Refresh
+              {tr.t("ui.refresh")}
             </Button>
             <Link href="/farm" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              Farm planner
+              {tr.t("nav.farm")}
             </Link>
             <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              Detailed desk
+              {tr.t("nav.desk")}
             </Link>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl space-y-5 px-4 py-5">
+        <TranslationNote />
         <section className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Select
             items={items}
@@ -166,8 +176,8 @@ export function SimpleView() {
             }}
             disabled={!data}
           >
-            <SelectTrigger className="h-11 w-full text-base sm:flex-1" aria-label="Choose your area">
-              <SelectValue placeholder="Choose your area" />
+            <SelectTrigger className="h-11 w-full text-base sm:flex-1" aria-label={tr.t("simple.chooseArea")}>
+              <SelectValue placeholder={tr.t("simple.chooseArea")} />
             </SelectTrigger>
             <SelectContent>
               {items.map((item) => (
@@ -179,30 +189,28 @@ export function SimpleView() {
           </Select>
           <Button variant="outline" className="h-11 text-base" onClick={locate} disabled={!data || locating}>
             <LocateFixed className={locating ? "animate-pulse" : ""} />
-            {locating ? "Finding you…" : "Use my location"}
+            {locating ? tr.t("simple.locating") : tr.t("simple.useLocation")}
           </Button>
         </section>
-        {locationNote && <p className="-mt-2 text-sm text-muted-foreground">{locationNote}</p>}
+        {locationNote && <p className="-mt-2 text-sm text-muted-foreground">{locationNote(tr)}</p>}
         {data && !chosenId && city && (
-          <p className="-mt-2 text-sm text-muted-foreground">
-            Showing the place with the highest heavy-rain risk right now. Choose your area above.
-          </p>
+          <p className="-mt-2 text-sm text-muted-foreground">{tr.t("simple.showingTop")}</p>
         )}
 
         {error && (
           <div className="rounded-xl border border-vermillion/40 px-4 py-3 text-base text-vermillion">
-            {error}. Check your internet connection and press Refresh.
+            {tr.t("simple.loadError")}
           </div>
         )}
 
-        {loading && !data && <LoadingCards />}
+        {loading && !data && <LoadingCards tr={tr} />}
 
-        {data && city && <CityGuide data={data} city={city} />}
+        {data && city && <CityGuide data={data} city={city} tr={tr} />}
 
         {data && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Across mainland India, next 3 days</CardTitle>
+              <CardTitle className="text-lg">{tr.t("simple.across")}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="divide-y divide-border">
@@ -221,10 +229,10 @@ export function SimpleView() {
                         }`}
                       >
                         <span>
-                          <span className="block text-base">{item.name}</span>
-                          <span className="block text-xs text-muted-foreground">{item.state}</span>
+                          <span className="block text-base">{placeName(item.id, item.name, tr)}</span>
+                          <span className="block text-xs text-muted-foreground">{stateName(item.state, tr)}</span>
                         </span>
-                        <RiskPill level={level} />
+                        <RiskPill level={level} tr={tr} />
                       </button>
                     </li>
                   )
@@ -237,20 +245,10 @@ export function SimpleView() {
         {data && (
           <footer className="space-y-3 pb-6 text-sm leading-6 text-muted-foreground">
             <p>
-              <span className="text-paper">This is guidance, not an official warning.</span> For warnings in your
-              district, follow the{" "}
-              <a className="underline underline-offset-4" href="https://mausam.imd.gov.in/" target="_blank" rel="noreferrer">
-                India Meteorological Department
-              </a>
-              , the Meghdoot app for farm advisories, and your local authorities.
+              <span className="text-paper">{tr.t("simple.guidance")}</span> {tr.t("simple.follow")}
             </p>
-            <p>
-              How it works: Varsha reads 80 runs of the European (ECMWF) and American (NCEP) weather models and counts how
-              many show heavy rain. It checks recent rain from NASA satellite-based estimates, compares with 30 years of
-              past weather (ERA5), and looks ahead with climate model projections (CMIP6). Each forecast point stands for
-              the area around a city, not a single field.
-            </p>
-            <p>Updated {formatIssued(data.generatedAt)} IST.</p>
+            <p>{tr.t("simple.how")}</p>
+            <p>{tr.t("simple.updated", { time: tr.issued(data.generatedAt) })}</p>
           </footer>
         )}
       </main>
@@ -258,14 +256,14 @@ export function SimpleView() {
   )
 }
 
-function CityGuide({ data, city }: { data: DeskResponse; city: CityDesk }) {
-  const top = headline(city)
-  const ground = groundStatus(city)
-  const advice = adviceFor(city, ground)
-  const future = futureOutlook(data, city)
-  const history = sameWeekHistory(city)
-  const agree = agreement(city)
-  const week = weekLine(city)
+function CityGuide({ data, city, tr }: { data: DeskResponse; city: CityDesk; tr: Translator }) {
+  const top = headline(city, tr)
+  const ground = groundStatus(city, tr)
+  const advice = adviceFor(city, ground, tr)
+  const future = futureOutlook(data, city, tr)
+  const history = sameWeekHistory(city, tr)
+  const agree = agreement(city, tr)
+  const week = weekLine(city, tr)
 
   return (
     <>
@@ -275,7 +273,7 @@ function CityGuide({ data, city }: { data: DeskResponse; city: CityDesk }) {
         aria-live="polite"
       >
         <p className="text-sm text-muted-foreground">
-          {city.name}, {city.state}
+          {placeName(city.id, city.name, tr)}, {stateName(city.state, tr)}
         </p>
         <h1 className="mt-1 font-heading text-2xl leading-tight sm:text-3xl">{top.title}</h1>
         <p className="mt-3 text-base leading-7">{top.detail}</p>
@@ -286,7 +284,7 @@ function CityGuide({ data, city }: { data: DeskResponse; city: CityDesk }) {
       {city.days.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Day by day</CardTitle>
+            <CardTitle className="text-lg">{tr.t("simple.dayByDay")}</CardTitle>
           </CardHeader>
           <CardContent>
             <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-7">
@@ -294,35 +292,34 @@ function CityGuide({ data, city }: { data: DeskResponse; city: CityDesk }) {
                 const kind = dayKind(day)
                 return (
                   <li key={day.date} className="rounded-lg bg-muted/60 px-2.5 py-2.5">
-                    <p className="text-sm font-medium">{weekdayOf(day.date)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDay(day.date)}</p>
+                    <p className="text-sm font-medium">{tr.weekday(day.date, "long")}</p>
+                    <p className="text-xs text-muted-foreground">{tr.date(day.date)}</p>
                     <span className="mt-2 block h-1.5 rounded-full" style={{ background: DAY_COLOR[kind] }} />
-                    <p className="mt-2 text-sm leading-5">{DAY_WORDS[kind]}</p>
+                    <p className="mt-2 text-sm leading-5">{dayWord(kind, tr)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Rain chance {day.rainChance == null ? "—" : `${Math.round(day.rainChance * 100)}%`}
+                      {tr.t("simple.rainChance", {
+                        pct: day.rainChance == null ? tr.t("common.dash") : `${Math.round(day.rainChance * 100)}%`,
+                      })}
                     </p>
-                    <p className="text-xs text-muted-foreground">{roundedMm(day.medianMm)}</p>
+                    <p className="text-xs text-muted-foreground">{roundedMm(day.medianMm, tr)}</p>
                   </li>
                 )
               })}
             </ol>
-            <p className="mt-3 text-xs leading-5 text-muted-foreground">
-              Rain chance means at least 2.5 mm in the day. The amount is a middle estimate; storms can bring much more
-              in one spot.
-            </p>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">{tr.t("simple.dayNote")}</p>
           </CardContent>
         </Card>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">What to do</CardTitle>
+          <CardTitle className="text-lg">{tr.t("simple.whatToDo")}</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="farm">
             <TabsList>
-              <TabsTrigger value="farm">On the farm</TabsTrigger>
-              <TabsTrigger value="business">Business and travel</TabsTrigger>
+              <TabsTrigger value="farm">{tr.t("simple.tabFarm")}</TabsTrigger>
+              <TabsTrigger value="business">{tr.t("simple.tabBusiness")}</TabsTrigger>
             </TabsList>
             <TabsContent value="farm">
               <AdviceList items={advice.farm} />
@@ -335,75 +332,56 @@ function CityGuide({ data, city }: { data: DeskResponse; city: CityDesk }) {
       </Card>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <InfoCard title={ground ? ground.title : "Recent rain"}>
+        <InfoCard title={ground ? ground.title : tr.t("simple.recentRain")}>
           {ground ? (
             <>
               <p>{ground.detail}</p>
               {ground.asOf && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Satellite-based estimate up to {ground.asOf}. It runs a few days behind.
-                </p>
+                <p className="mt-2 text-xs text-muted-foreground">{tr.t("simple.satAsOf", { date: ground.asOf })}</p>
               )}
             </>
           ) : (
-            <p className="text-muted-foreground">Recent satellite rain estimates are not available for this place.</p>
+            <p className="text-muted-foreground">{tr.t("simple.noSat")}</p>
           )}
         </InfoCard>
-        <InfoCard title="Is this normal?">
-          <p>{typicalYear(city)}</p>
+        <InfoCard title={tr.t("simple.normal")}>
+          <p>{typicalYear(city, tr)}</p>
           {history && <p className="mt-2">{history}</p>}
-          <p className="mt-2 text-xs text-muted-foreground">Heavy rain means 6.5 cm (65 mm) or more in one day.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{tr.t("simple.heavyDef")}</p>
         </InfoCard>
       </div>
 
       {future.length > 0 && (
-        <InfoCard title="Looking ahead: the 2030s and 2040s">
+        <InfoCard title={tr.t("simple.ahead")}>
           {future.map((item) => (
             <div key={item.title} className="mb-3">
               <p className="text-xs text-muted-foreground">{item.title}</p>
               <p className="mt-1">{item.detail}</p>
             </div>
           ))}
-          <p className="mt-2 text-xs text-muted-foreground">
-            This is for long-term planning, such as crop choice, drainage, and storage. It says nothing about this week.
-          </p>
+          <p className="mt-2 text-xs text-muted-foreground">{tr.t("simple.aheadNote")}</p>
         </InfoCard>
       )}
 
       {data.season.note && (
         <p className="text-sm leading-6 text-muted-foreground">
-          <span className="text-paper">{data.season.title}.</span> {plainSeason(data.season.id)}
+          <span className="text-paper">{tr.t(`seasonTitle.${seasonId(data.season.id)}`)}.</span>{" "}
+          {tr.t(`seasonNote.${seasonId(data.season.id)}`)}
         </p>
       )}
     </>
   )
 }
 
-function weekdayOf(iso: string): string {
-  const [year, month, day] = iso.split("-").map(Number)
-  return new Intl.DateTimeFormat("en-IN", { weekday: "long", timeZone: "UTC" }).format(
-    new Date(Date.UTC(year, month - 1, day)),
-  )
+function seasonId(id: string): "sw" | "ne" | "winter" | "pre" {
+  return id === "sw" || id === "ne" || id === "winter" ? id : "pre"
 }
 
-function plainSeason(id: string): string {
-  switch (id) {
-    case "sw":
-      return "This is the main monsoon season. Heavy rain is most common now, especially on the west coast, in central India, and in the northeast."
-    case "ne":
-      return "The main monsoon has left most of India. Tamil Nadu, south Andhra Pradesh, and nearby coasts still get their rainy season now, and cyclones can bring very heavy rain."
-    case "winter":
-      return "Heavy rain is uncommon now. The far north can still get rain and snow from winter storms."
-    default:
-      return "Before the monsoon, short but violent thunderstorms can bring heavy rain, hail, and strong wind to small areas."
-  }
-}
-
-function RiskPill({ level }: { level: keyof typeof RISK_WORDS }) {
+function RiskPill({ level, tr }: { level: RiskLevel; tr: Translator }) {
   return (
     <span className="flex shrink-0 items-center gap-2 text-sm">
       <span className="inline-block size-2.5 rounded-full" style={{ background: RISK_COLOR[level] }} />
-      {RISK_WORDS[level]}
+      {riskWord(level, tr)}
     </span>
   )
 }
@@ -432,7 +410,7 @@ function InfoCard({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function LoadingCards() {
+function LoadingCards({ tr }: { tr: Translator }) {
   return (
     <div className="space-y-5" aria-busy="true">
       <div className="rounded-xl bg-card px-4 py-5 ring-1 ring-foreground/10">
@@ -441,9 +419,7 @@ function LoadingCards() {
         <div className="mt-4 h-4 w-full animate-pulse rounded bg-muted" />
         <div className="mt-2 h-4 w-2/3 animate-pulse rounded bg-muted" />
       </div>
-      <p className="text-center text-sm text-muted-foreground">
-        Getting the latest weather model runs and satellite rain for 21 places. The first load takes a few seconds.
-      </p>
+      <p className="text-center text-sm text-muted-foreground">{tr.t("simple.loading")}</p>
     </div>
   )
 }
