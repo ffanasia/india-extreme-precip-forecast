@@ -8,6 +8,26 @@ There are three views:
 
 - `/` is the detailed desk for forecasters and researchers: thresholds, windows, model breakdowns, plumes, and the CMIP6 map.
 - `/simple` is the heavy rain guide for farmers and non-specialists. It turns the numbers into risk words ("Small chance", "Likely"), natural frequencies ("about 3 in 10"), a day-by-day strip, ground wetness from the satellite layer, and what to do on the farm or for business and travel. Pick a place or use your location; the choice is kept in the link (`/simple?city=chennai`) so it can be shared.
+- `/farm` is the farm planner. Choose a place, a crop, and its sowing (or transplanting) date, and it works out the crop stage on each of the next seven days and the best day and hours to spray, top-dress fertiliser, irrigate, sow, harvest, and work outdoors. It raises heat, frost, disease, lodging-wind, heavy-rain, air-quality, and ozone alerts, and lists the crops that grow well in that area by season. Settings live in the link, e.g. `/farm?city=amritsar&crop=mustard&sown=2026-09-28`.
+
+### How the farm planner decides
+
+- **Crop stages** come from days after sowing, using typical durations for eight crops (wheat, transplanted rice, cotton, maize, soybean, chickpea, mustard, potato). Each stage carries a crop coefficient for water use, heat and frost limits, when nitrogen is due, and which diseases matter.
+- **Spraying** needs at least three consecutive daylight hours with wind of 3–15 km/h, gusts under 25 km/h, temperature at or below 30 °C, humidity of at least 40%, and no rain in the next five hours.
+- **Irrigation** runs a daily soil-water balance: crop water use (FAO-56 reference evaporation times the stage coefficient) minus effective rain, starting from the model's root-zone soil moisture or your last irrigation date. It flags the day the crop would use more than its allowable share of soil water, earlier at critical stages, and holds off if 10 mm or more of rain is due within two days. Frost nights and heat days at sensitive stages add protective irrigation.
+- **Fertiliser** is only suggested at stages where a nitrogen dose is due, and never before heavy rain or on waterlogged soil.
+- **Sowing** checks the crop's temperature range, workable soil moisture, the usual sowing months, and no heavy rain in the following two days.
+- **Disease weather** counts humid hours (relative humidity of 90% or more, or rain) inside each disease's temperature band.
+- **Air quality** uses the CPCB AQI bands for PM2.5 and PM10. **Ozone crop stress** uses daily AOT40 (daytime ozone above 40 ppb). CAMS overestimates surface ozone over India, so ozone is shown as a relative crop-stress band and left out of the AQI.
+- **What grows well** lists the typical kharif, rabi, and zaid crops and the orchards and plantations around each place, with the soil type, after ICAR agro-climatic zone descriptions (`src/lib/agro/regions.ts`). The season whose sowing window is open comes first. Each crop shows how much water it needs, and the eight planner crops also show whether this week's temperature suits sowing, with a button to plan that crop. Where ERA5 puts annual rain under 600 mm, crops that need less water are listed first.
+
+### Languages
+
+The rain guide and the farm planner can be read in English, Hindi, Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu, Kannada, and Malayalam. Pick one from the language menu in the header. The choice is saved in the browser and in the link (`/farm?lang=ta`). The detailed desk stays in English.
+
+All text comes from the English catalogue in `src/lib/i18n/en.ts`. Each language in `src/lib/i18n/messages/` must provide every key with the same `{placeholders}`, and the type-checker enforces that. A missing key falls back to English. The translations were drafted by software, so have a native speaker review them before relying on them in the field. Digits stay in Latin script, and Indic Noto Sans fonts are only downloaded when a page shows that script.
+
+Extra sources for the planner: the [Open-Meteo forecast API](https://open-meteo.com/en/docs) (hourly temperature, humidity, rain, wind, FAO-56 evaporation, soil moisture) and the [Open-Meteo air-quality API](https://open-meteo.com/en/docs/air-quality-api) (Copernicus CAMS global PM2.5, PM10, ozone, dust, aerosol optical depth). Both are cached for an hour in `data/cache/farm.json`.
 
 ## Sources
 
