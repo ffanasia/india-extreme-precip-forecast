@@ -146,6 +146,9 @@ export function SimpleView() {
               <RefreshCw className={loading ? "animate-spin" : ""} />
               Refresh
             </Button>
+            <Link href="/farm" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Farm planner
+            </Link>
             <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
               Detailed desk
             </Link>

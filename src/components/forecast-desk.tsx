@@ -144,6 +144,9 @@ export function ForecastDesk() {
           <Link href="/simple" className={buttonVariants({ variant: "outline", size: "sm" })}>
             Simple guide
           </Link>
+          <Link href="/farm" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Farm planner
+          </Link>
           <Button variant="outline" size="sm" onClick={() => void load(true)} disabled={loading}>
             <RefreshCw className={loading ? "animate-spin" : ""} />
             Refresh
