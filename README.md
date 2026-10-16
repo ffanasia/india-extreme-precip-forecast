@@ -19,15 +19,18 @@ The mainland outline is Natural Earth 1:50m admin-1, public domain, with island 
 
 ## Run
 
+Needs Node 20.9 or newer and an internet connection for the live feeds.
+
 ```bash
 npm install
-npm run climatology
 npm run dev
 ```
 
-Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
+Open [http://127.0.0.1:43123](http://127.0.0.1:43123). The server listens on localhost only.
 
-`npm run climatology` fetches ERA5 and CMIP6 once and writes `data/climatology.json`. Raw responses land in `data/raw/` and are reused if you run the script again. The desk caches the live ensemble and satellite pull for 30 minutes in `data/cache/`.
+`data/climatology.json` is committed, so a fresh clone works without rebuilding it. To refresh the ERA5 and CMIP6 layer, run `npm run climatology`; it makes about 30 large archive requests, writes raw responses to `data/raw/`, and reuses them on later runs. The desk caches the live ensemble and satellite pull for 30 minutes in `data/cache/`.
+
+For a faster local server, run `npm run build && npm start` on the same port.
 
 ```bash
 npm test
