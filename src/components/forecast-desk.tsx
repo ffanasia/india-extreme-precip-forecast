@@ -1,13 +1,14 @@
 "use client"
 
 import { RefreshCw } from "lucide-react"
+import Link from "next/link"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 
 import { Briefing } from "@/components/briefing"
 import { IndiaMap, type MapPoint } from "@/components/india-map"
 import { MethodDialog } from "@/components/method-dialog"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -140,6 +141,9 @@ export function ForecastDesk() {
             </TabsList>
           </Tabs>
           <MethodDialog />
+          <Link href="/simple" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Simple guide
+          </Link>
           <Button variant="outline" size="sm" onClick={() => void load(true)} disabled={loading}>
             <RefreshCw className={loading ? "animate-spin" : ""} />
             Refresh
