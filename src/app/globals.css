@@ -138,6 +138,39 @@
     radial-gradient(ellipse at 50% 42%, #2a241c 0%, #14120e 68%);
 }
 
+.desk-grid {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-areas:
+    "controls"
+    "map"
+    "briefing"
+    "list";
+  grid-template-rows: auto minmax(440px, 62vh) auto auto;
+}
+
+.desk-controls { grid-area: controls; }
+.desk-list { grid-area: list; }
+.desk-map { grid-area: map; min-height: 0; }
+.desk-briefing { grid-area: briefing; min-height: 0; }
+
+@media (min-width: 1024px) {
+  .desk-grid {
+    height: 100%;
+    grid-template-columns: 300px minmax(0, 1fr) 360px;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "controls map briefing"
+      "list map briefing";
+  }
+
+  .desk-list,
+  .desk-briefing {
+    overflow: hidden;
+  }
+}
+
 .font-heading {
   font-family: var(--font-heading);
 }

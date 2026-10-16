@@ -46,7 +46,7 @@ export function MethodDialog() {
               Open-Meteo characterises these runs as the high-resolution CMIP6 set closest to RCP8.5; it is not a full
               SSP ensemble, and it is not blended into this week&apos;s probability. The real-time cycle is IFS plus
               GEFS. Satellite context is NASA POWER PRECTOTCORR from GEOS-IT, a satellite- and gauge-informed analysis
-              with about two days of latency. GPM IMERG Early and Late are the swath products this layer stands in for;
+              The latest valid day is usually a few days behind the calendar. GPM IMERG Early and Late are the swath products this layer stands in for;
               the public PPS archive asks for an Earthdata login.
             </p>
           </section>

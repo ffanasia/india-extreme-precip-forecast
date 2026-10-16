@@ -70,8 +70,8 @@ export function IndiaMap({
     if (!outline) return null
     const projection = geoMercator().fitExtent(
       [
-        [16, 16],
-        [size.width - 16, size.height - 16],
+        [20, 28],
+        [size.width - 20, size.height - 24],
       ],
       outline,
     )
@@ -114,7 +114,14 @@ export function IndiaMap({
           const [x, y] = xy
           const selected = point.id === selectedId
           const showLabel = selected || hover === point.id
-          const placeLeft = x > size.width * 0.72
+          const labelClass =
+            x > size.width * 0.62
+              ? "left-full top-1/2 ml-1.5 -translate-y-1/2"
+              : x < size.width * 0.38
+                ? "right-full top-1/2 mr-1.5 -translate-y-1/2"
+                : y < 80
+                  ? "top-full left-1/2 mt-1 -translate-x-1/2"
+                  : "bottom-full left-1/2 mb-1 -translate-x-1/2"
           return (
             <button
               key={point.id}
@@ -143,9 +150,7 @@ export function IndiaMap({
               />
               {showLabel && !point.dimmed && (
                 <span
-                  className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-left text-[11px] whitespace-nowrap text-paper ${
-                    placeLeft ? "right-full pr-2" : "left-full pl-2"
-                  }`}
+                  className={`pointer-events-none absolute z-10 rounded-md bg-background/95 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-paper ring-1 ring-border ${labelClass}`}
                 >
                   <span className="font-heading text-[13px] italic">{point.name}</span>
                   <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{point.label}</span>

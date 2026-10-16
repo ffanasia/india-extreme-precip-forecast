@@ -9,7 +9,6 @@ import { MethodDialog } from "@/components/method-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatDay, formatIssued, formatRange } from "@/lib/dates"
@@ -148,8 +147,8 @@ export function ForecastDesk() {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[300px_minmax(0,1fr)_360px] lg:grid-rows-1">
-        <aside className="flex min-h-0 flex-col border-border lg:border-r">
+      <div className="desk-grid">
+        <section className="desk-controls border-border lg:border-r">
           <div className="space-y-4 px-4 py-4">
             {mode === "week" ? (
               <>
@@ -212,7 +211,9 @@ export function ForecastDesk() {
             )}
             {data && mode === "week" && <LegendWeek />}
           </div>
-          <Separator />
+        </section>
+
+        <section className="desk-list flex min-h-0 flex-col border-border lg:h-full lg:overflow-hidden lg:border-r">
           <div className="px-4 py-3">
             <Input
               value={query}
@@ -221,8 +222,9 @@ export function ForecastDesk() {
               aria-label="Find a city or state"
             />
           </div>
-          <ScrollArea className="min-h-[240px] flex-1 lg:min-h-0">
-            <ul className="px-2 pb-3">
+          <Separator />
+          <div className="min-h-0 flex-1 overflow-y-auto lg:max-h-full">
+            <ul className="px-2 py-2">
               {ranked.map((city) => {
                 const view = city.views[windowId][thresholdId]
                 const shift = data?.regions.find((item) => item.id === city.regionId)?.[season].heavyDaysPct ?? null
@@ -257,40 +259,42 @@ export function ForecastDesk() {
                 <li className="px-2 py-6 text-sm text-muted-foreground">No anchor matches that search.</li>
               )}
             </ul>
-          </ScrollArea>
-        </aside>
+          </div>
+        </section>
 
-        <main className="relative min-h-[520px] lg:min-h-0">
-          {error && (
-            <div className="absolute inset-x-4 top-4 z-10 rounded-lg border border-vermillion/40 bg-background/95 px-3 py-2 text-sm text-vermillion">
-              {error}
-            </div>
-          )}
-          {loading && !data && (
-            <div className="absolute inset-x-0 top-16 z-10 text-center text-sm text-muted-foreground">
-              Reading ECMWF IFS, NCEP GEFS, and satellite-informed rain for 21 anchors.
-            </div>
-          )}
-          <IndiaMap
-            points={points}
-            selectedId={selectedId}
-            highlightRegion={mode === "climate" ? selected?.regionId ?? null : null}
-            onSelect={setChosenId}
-          />
+        <main className="desk-map flex h-full min-h-[440px] flex-col">
+          <div className="relative min-h-0 flex-1">
+            {error && (
+              <div className="absolute inset-x-4 top-4 z-10 rounded-lg border border-vermillion/40 bg-background/95 px-3 py-2 text-sm text-vermillion">
+                {error}
+              </div>
+            )}
+            {loading && !data && (
+              <div className="absolute inset-x-0 top-16 z-10 text-center text-sm text-muted-foreground">
+                Reading ECMWF IFS, NCEP GEFS, and satellite-informed rain for 21 anchors.
+              </div>
+            )}
+            <IndiaMap
+              points={points}
+              selectedId={selectedId}
+              highlightRegion={mode === "climate" ? selected?.regionId ?? null : null}
+              onSelect={setChosenId}
+            />
+          </div>
           {data && (
-            <div className="pointer-events-none absolute inset-x-4 bottom-3 flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 border-t border-border px-3 py-2">
               <SourceChip label="ERA5" status={data.sources.era5.status} />
               <SourceChip label="CMIP6" status={data.sources.cmip6.status} />
               <SourceChip label="Real-time" status={data.sources.realtime.status} />
               <SourceChip label="Satellite" status={data.sources.satellite.status} />
-              <span className="rounded-full border border-border bg-background/80 px-2 py-0.5 text-[11px] text-muted-foreground">
+              <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
                 {data.fromCache ? "Cached ensemble" : "Live ensemble"} · {formatIssued(data.generatedAt)} IST
               </span>
             </div>
           )}
         </main>
 
-        <aside className="min-h-[420px] border-border lg:min-h-0 lg:border-l">
+        <aside className="desk-briefing border-border lg:h-full lg:overflow-hidden lg:border-l">
           {data ? (
             <Briefing
               city={selected}

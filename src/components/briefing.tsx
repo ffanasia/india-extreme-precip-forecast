@@ -182,7 +182,7 @@ function WeekHero({
         <Badge variant={view.category === "severe" || view.category === "high" ? "destructive" : "secondary"}>
           {CATEGORY_LABEL[view.category]}
         </Badge>
-        <Badge variant="outline">{CONFIDENCE_LABEL[view.confidence]}</Badge>
+        {view.confidence !== "quiet" && <Badge variant="outline">{CONFIDENCE_LABEL[view.confidence]}</Badge>}
       </div>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
         Threshold {formatMm(view.thresholdMm)}. {thresholdLabel}. Local wet-day R99p at {city.name} is{" "}
@@ -266,7 +266,9 @@ function Plume({ models, threshold }: { models: CityDesk["plume"]; threshold: nu
   const dates = models[0]?.days.map((day) => day.date) ?? []
   if (dates.length === 0) return null
   const highs = models.flatMap((model) => model.days.map((day) => day.p90))
-  const maxY = Math.max(threshold, ...highs, 10) * 1.15
+  const dataMax = Math.max(...highs, 1)
+  const thresholdOnScale = threshold <= dataMax * 1.35
+  const maxY = (thresholdOnScale ? Math.max(threshold, dataMax) : dataMax) * 1.18
   const width = 320
   const height = 128
   const padL = 34
@@ -294,15 +296,17 @@ function Plume({ models, threshold }: { models: CityDesk["plume"]; threshold: nu
             </g>
           )
         })}
-        <line
-          x1={padL}
-          x2={width - padR}
-          y1={yAt(threshold)}
-          y2={yAt(threshold)}
-          stroke="#e24a2e"
-          strokeDasharray="3 3"
-          strokeWidth="1"
-        />
+        {thresholdOnScale && (
+          <line
+            x1={padL}
+            x2={width - padR}
+            y1={yAt(threshold)}
+            y2={yAt(threshold)}
+            stroke="#e24a2e"
+            strokeDasharray="3 3"
+            strokeWidth="1"
+          />
+        )}
         {models.map((model) => {
           const byDate = new Map(model.days.map((day) => [day.date, day]))
           const present = dates.flatMap((date, index) => {
@@ -337,10 +341,14 @@ function Plume({ models, threshold }: { models: CityDesk["plume"]; threshold: nu
           </text>
         ))}
       </svg>
-      <p className="mt-1 flex gap-3 text-[11px] text-muted-foreground">
+      <p className="mt-1 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
         <span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-saffron" />IFS p10–p90</span>
         <span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-monsoon" />GEFS p10–p90</span>
-        <span><i className="mr-1 inline-block h-2 w-3 border-t border-dashed border-vermillion" />threshold</span>
+        <span>
+          {thresholdOnScale
+            ? "Dashed line is the threshold."
+            : `The ${formatMm(threshold)} threshold sits above this plume.`}
+        </span>
       </p>
     </section>
   )
