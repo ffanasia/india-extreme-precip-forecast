@@ -32,6 +32,13 @@ export function formatDay(iso: string): string {
   return `${day} ${MONTHS[month - 1]}`
 }
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+export function formatWeekday(iso: string): string {
+  const { year, month, day } = parseIso(iso)
+  return WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()]
+}
+
 export function formatDayYear(iso: string): string {
   const { year } = parseIso(iso)
   return `${formatDay(iso)} ${year}`

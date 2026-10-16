@@ -1,6 +1,9 @@
 import {
   CITIES,
+  HEAVY_MM,
+  RAINY_DAY_MM,
   REGIONS,
+  VERY_HEAVY_MM,
   THRESHOLDS,
   WINDOWS,
   regionById,
@@ -22,7 +25,7 @@ import {
   indexByDate,
   windowExceedance,
 } from "./stats"
-import type { CityDesk, CityView, ClimatologyFile, DeskResponse, LiveBundle, RegionClimate } from "./types"
+import type { CityDesk, CityView, ClimatologyFile, DayOutlook, DeskResponse, LiveBundle, RegionClimate } from "./types"
 import type { ParsedEnsemble } from "./ensemble"
 
 const ERA5_FIRST_YEAR = 1991
@@ -126,6 +129,24 @@ function buildAnalogs(
   return analogs
 }
 
+function buildDays(ensemble: ParsedEnsemble | null): DayOutlook[] {
+  if (!ensemble) return []
+  const chance = (index: number, threshold: number) =>
+    blendProbabilities(ensemble.models.map((model) => dailyExceedance(model.members, index, threshold)))
+  return ensemble.dates.map((date, index) => {
+    const medians = ensemble.models
+      .map((model) => dayQuantiles(model.members, index)?.p50)
+      .filter((value): value is number => value != null)
+    return {
+      date,
+      medianMm: medians.length ? medians.reduce((sum, value) => sum + value, 0) / medians.length : null,
+      rainChance: chance(index, RAINY_DAY_MM),
+      heavyChance: chance(index, HEAVY_MM),
+      veryHeavyChance: chance(index, VERY_HEAVY_MM),
+    }
+  })
+}
+
 function sourceStatus(ready: number, total: number): "ready" | "degraded" | "down" {
   if (ready === 0) return "down"
   if (ready < total) return "degraded"
@@ -179,6 +200,7 @@ export function buildDesk(
           return quantiles ? [{ date, ...quantiles }] : []
         }),
       })),
+      days: buildDays(ensemble),
       analogs: buildAnalogs(ensemble, byDate),
       views: buildViews(ensemble, byDate, record.summary.r99p),
       ensembleError: liveCity?.ensembleError,

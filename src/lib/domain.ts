@@ -202,6 +202,8 @@ export const CMIP6_MODELS = [
   },
 ] as const
 
+/** IMD's rainy-day definition. */
+export const RAINY_DAY_MM = 2.5
 export const HEAVY_MM = 64.5
 export const VERY_HEAVY_MM = 115.6
 export const EXTREME_MM = 204.5

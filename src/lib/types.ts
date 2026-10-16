@@ -126,9 +126,18 @@ export type CityDesk = {
     members: number
     days: { date: string; p10: number; p50: number; p90: number; mean: number }[]
   }[]
+  days: DayOutlook[]
   analogs: Record<WindowId, { year: number; rmse: number; peakMm: number; windowMm: number } | null>
   views: Record<WindowId, Record<ThresholdId, CityView>>
   ensembleError?: string
+}
+
+export type DayOutlook = {
+  date: string
+  medianMm: number | null
+  rainChance: number | null
+  heavyChance: number | null
+  veryHeavyChance: number | null
 }
 
 export type DeskResponse = {
