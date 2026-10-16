@@ -4,6 +4,11 @@ Extreme precipitation desk for mainland India. It scores the chance of a heavy-r
 
 Andaman and Nicobar and Lakshadweep are outside this desk.
 
+There are two views of the same forecast:
+
+- `/` is the detailed desk for forecasters and researchers: thresholds, windows, model breakdowns, plumes, and the CMIP6 map.
+- `/simple` is the heavy rain guide for farmers and non-specialists. It turns the numbers into risk words ("Small chance", "Likely"), natural frequencies ("about 3 in 10"), a day-by-day strip, ground wetness from the satellite layer, and what to do on the farm or for business and travel. Pick a place or use your location; the choice is kept in the link (`/simple?city=chennai`) so it can be shared.
+
 ## Sources
 
 - **ERA5** daily precipitation, 1991–2020, from the [Open-Meteo archive](https://open-meteo.com/en/docs/historical-weather-api). Land grid cells, Asia/Kolkata civil days. Used for the wet-day 99th percentile (R99p), IMD-threshold frequencies, calendar-window climatology, and analog years.
