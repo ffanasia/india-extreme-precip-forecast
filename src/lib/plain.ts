@@ -1,17 +1,8 @@
-import { formatDay, formatWeekday } from "./dates"
+import { english, type Key, type Translator } from "./i18n"
 import type { SeasonName } from "./stats"
 import type { CityDesk, DayOutlook, DeskResponse } from "./types"
 
 export type RiskLevel = "unknown" | "unlikely" | "small" | "real" | "likely" | "very_likely"
-
-export const RISK_WORDS: Record<RiskLevel, string> = {
-  unknown: "No forecast right now",
-  unlikely: "Unlikely",
-  small: "Small chance",
-  real: "Real chance",
-  likely: "Likely",
-  very_likely: "Very likely",
-}
 
 export const RISK_COLOR: Record<RiskLevel, string> = {
   unknown: "#5c564c",
@@ -20,6 +11,26 @@ export const RISK_COLOR: Record<RiskLevel, string> = {
   real: "#e08a3c",
   likely: "#e24a2e",
   very_likely: "#ff3b30",
+}
+
+export function riskWord(level: RiskLevel, tr: Translator = english): string {
+  return tr.t(`risk.${level}`)
+}
+
+/** Translated name for a place id, falling back to the name the data carries. */
+export function placeName(id: string, fallback: string, tr: Translator = english): string {
+  const key = `city.${id}`
+  return tr.has(key) ? tr.t(key) : fallback
+}
+
+export function stateName(state: string, tr: Translator = english): string {
+  const key = `state.${state}`
+  return tr.has(key) ? tr.t(key) : state
+}
+
+export function regionName(id: string, fallback: string, tr: Translator = english): string {
+  const key = `region.${id}`
+  return tr.has(key) ? tr.t(key) : fallback
 }
 
 /** Same breakpoints as the detailed desk categories, so both views rank places identically. */
@@ -32,23 +43,18 @@ export function riskLevel(probability: number | null): RiskLevel {
   return "very_likely"
 }
 
-export function chanceInWords(probability: number | null): string {
-  if (probability == null || !Number.isFinite(probability)) return "not known"
-  if (probability < 0.05) return "less than 1 in 20"
-  if (probability < 0.1) return "less than 1 in 10"
-  if (probability >= 0.95) return "almost certain"
-  return `about ${Math.round(probability * 10)} in 10`
+export function chanceInWords(probability: number | null, tr: Translator = english): string {
+  if (probability == null || !Number.isFinite(probability)) return tr.t("chance.unknown")
+  if (probability < 0.05) return tr.t("chance.lt20")
+  if (probability < 0.1) return tr.t("chance.lt10")
+  if (probability >= 0.95) return tr.t("chance.certain")
+  return tr.t("chance.about", { n: Math.round(probability * 10) })
 }
 
 export type DayKind = "dry" | "showers" | "rain" | "heavy_possible" | "heavy_risk" | "unknown"
 
-export const DAY_WORDS: Record<DayKind, string> = {
-  unknown: "No forecast",
-  dry: "Mostly dry",
-  showers: "Some showers",
-  rain: "Rainy",
-  heavy_possible: "Heavy rain possible",
-  heavy_risk: "Heavy rain risk",
+export function dayWord(kind: DayKind, tr: Translator = english): string {
+  return tr.t(`dayKind.${kind}`)
 }
 
 export function dayKind(day: DayOutlook): DayKind {
@@ -60,51 +66,32 @@ export function dayKind(day: DayOutlook): DayKind {
   return "dry"
 }
 
-export function dayLabel(iso: string): string {
-  return `${formatWeekday(iso)} ${formatDay(iso)}`
-}
-
-export function roundedMm(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "—"
-  if (value < 1) return "under 1 mm"
-  return `about ${Math.round(value)} mm`
+export function roundedMm(value: number | null, tr: Translator = english): string {
+  if (value == null || !Number.isFinite(value)) return tr.t("common.dash")
+  if (value < 1) return tr.t("mm.under1")
+  return tr.t("mm.about", { n: Math.round(value) })
 }
 
 export type Ground = { kind: "dry" | "wet" | "soaked"; title: string; detail: string; asOf: string | null }
 
-export function groundStatus(city: CityDesk): Ground | null {
+export function groundStatus(city: CityDesk, tr: Translator = english): Ground | null {
   const satellite = city.satellite
   if (!satellite || satellite.days.length === 0) return null
-  const total = satellite.days.reduce((sum, day) => sum + day.mm, 0)
-  const asOf = satellite.latest ? formatDay(satellite.latest.date) : null
-  const tenDays = `${Math.round(total)} mm of rain in the last ${satellite.days.length} days`
+  const sum = satellite.days.reduce((acc, day) => acc + day.mm, 0)
+  const asOf = satellite.latest ? tr.date(satellite.latest.date) : null
+  const total = tr.t("ground.tenDays", { mm: Math.round(sum), days: satellite.days.length })
   if (satellite.antecedent === "extreme") {
-    return {
-      kind: "soaked",
-      title: "Ground is soaked",
-      detail: `Very heavy rain fell in the last three days (${tenDays}). Fields may already be waterlogged, and streams and drains can rise fast with any more rain.`,
-      asOf,
-    }
+    return { kind: "soaked", title: tr.t("ground.soakedTitle"), detail: tr.t("ground.soakedDetail", { total }), asOf }
   }
   if (satellite.antecedent === "wet") {
-    return {
-      kind: "wet",
-      title: "Ground is already wet",
-      detail: `The last three days were wetter than usual here (${tenDays}). More rain will run off and pool sooner than normal.`,
-      asOf,
-    }
+    return { kind: "wet", title: tr.t("ground.wetTitle"), detail: tr.t("ground.wetDetail", { total }), asOf }
   }
   return {
     kind: "dry",
-    title: total < 10 ? "Ground has been dry" : "Ground is not waterlogged",
-    detail: `Satellite estimate: ${tenDays}. The soil can still take in some rain before water starts to pool.`,
+    title: tr.t(sum < 10 ? "ground.dryTitle" : "ground.okTitle"),
+    detail: tr.t("ground.dryDetail", { total }),
     asOf,
   }
-}
-
-const SEASON_WORDS: Record<SeasonName, string> = {
-  jjas: "June–September monsoon",
-  ond: "October–December rains",
 }
 
 /** Below this many heavy days per season, the October–December change is noise for planning. */
@@ -112,7 +99,7 @@ const OND_RELEVANT_DAYS = 0.3
 
 export type Future = { title: string; detail: string; uncertain: boolean }
 
-export function futureOutlook(response: DeskResponse, city: CityDesk): Future[] {
+export function futureOutlook(response: DeskResponse, city: CityDesk, tr: Translator = english): Future[] {
   const region = response.regions.find((item) => item.id === city.regionId)
   if (!region) return []
   const seasons: SeasonName[] = ["jjas"]
@@ -127,96 +114,94 @@ export function futureOutlook(response: DeskResponse, city: CityDesk): Future[] 
     if (!Number.isFinite(before) || !Number.isFinite(after)) return []
     const spread = climate.heavyDaysSpread
     const uncertain = spread != null && spread[0] < 0 && spread[1] > 0
+    const change = changeSentence(before, after, climate.heavyDaysPct, tr)
     return [
       {
-        title: `${region.name}, ${SEASON_WORDS[season]}`,
-        detail: `${changeSentence(before, after, climate.heavyDaysPct)}${
-          uncertain ? " The three climate models do not agree on the direction, so treat this as uncertain." : ""
-        }`,
+        title: tr.t("future.title", {
+          region: regionName(region.id, region.name, tr),
+          season: tr.t(`seasonName.${season}`),
+        }),
+        detail: uncertain ? `${change} ${tr.t("future.uncertain")}` : change,
         uncertain,
       },
     ]
   })
 }
 
-function changeSentence(before: number, after: number, pct: number | null): string {
-  if (before < 0.05 && after < 0.05) {
-    return "Heavy-rain days almost never happen in this season, today or in the 2030s and 2040s."
-  }
+function changeSentence(before: number, after: number, pct: number | null, tr: Translator): string {
+  if (before < 0.05 && after < 0.05) return tr.t("future.none")
   if (before < 1 && after < 1) {
     const now = Math.round(before * 10)
     const later = Math.round(after * 10)
-    const trend = later > now ? "slightly more often" : later < now ? "slightly less often" : "about as often"
-    const tenths = (value: number) => (value === 0 ? "less than 1" : `about ${value}`)
-    return `Heavy-rain days are rare in this season and should stay rare, coming ${trend}: ${tenths(now)} in every 10 seasons today, and ${tenths(later)} in every 10 in the 2030s and 2040s.`
+    const trend = tr.t(later > now ? "future.trendMore" : later < now ? "future.trendLess" : "future.trendSame")
+    const tenths = (value: number) => (value === 0 ? tr.t("future.tenthsLt1") : tr.t("future.tenthsAbout", { n: value }))
+    return tr.t("future.rare", { trend, now: tenths(now), later: tenths(later) })
   }
   const rounded = pct == null ? 0 : Math.round(pct)
-  const direction =
-    Math.abs(rounded) < 5
-      ? "about the same number of heavy-rain days in the 2030s and 2040s as in 1991–2014"
-      : `about ${Math.abs(rounded)}% ${rounded > 0 ? "more" : "fewer"} heavy-rain days in the 2030s and 2040s than in 1991–2014`
-  return `Climate models expect ${direction}: roughly ${daysWord(after)} a season, against ${daysWord(before)} today.`
+  const params = { pct: Math.abs(rounded), after: daysWord(after, tr), before: daysWord(before, tr) }
+  if (Math.abs(rounded) < 5) return tr.t("future.same", params)
+  return tr.t(rounded > 0 ? "future.more" : "future.fewer", params)
 }
 
-function daysWord(value: number): string {
+export function daysWord(value: number, tr: Translator = english): string {
   const rounded = value < 3 ? Math.round(value * 10) / 10 : Math.round(value)
-  return `${rounded} ${rounded === 1 ? "day" : "days"}`
+  return tr.t(rounded === 1 ? "days.one" : "days.many", { n: rounded })
 }
 
-export function typicalYear(city: CityDesk): string {
+export function typicalYear(city: CityDesk, tr: Translator = english): string {
   const perYear = city.era5.heavyDays / Math.max(city.era5.years, 1)
-  if (perYear < 0.5) return `Heavy rain is rare in ${city.name}: less than one day in two years, on average.`
-  if (perYear < 1.5) return `In a typical year, ${city.name} gets heavy rain on about one day.`
-  return `In a typical year, ${city.name} gets heavy rain on about ${Math.round(perYear)} days.`
+  const name = placeName(city.id, city.name, tr)
+  if (perYear < 0.5) return tr.t("typical.rare", { city: name })
+  if (perYear < 1.5) return tr.t("typical.one", { city: name })
+  return tr.t("typical.many", { city: name, n: Math.round(perYear) })
 }
 
-export function sameWeekHistory(city: CityDesk): string | null {
+export function sameWeekHistory(city: CityDesk, tr: Translator = english): string | null {
   const view = city.views["7d"].heavy
   if (view.climatologyYears === 0) return null
-  if (view.climatologyHits === 0) {
-    return `In the last ${view.climatologyYears} years, this same week never had a heavy-rain day here.`
-  }
-  return `In the last ${view.climatologyYears} years, this same week had a heavy-rain day in ${view.climatologyHits} of them.`
+  if (view.climatologyHits === 0) return tr.t("history.never", { years: view.climatologyYears })
+  return tr.t("history.some", { years: view.climatologyYears, hits: view.climatologyHits })
 }
 
 export type Advice = { farm: string[]; business: string[] }
 
-export function adviceFor(city: CityDesk, ground: Ground | null): Advice {
+export function adviceFor(city: CityDesk, ground: Ground | null, tr: Translator = english): Advice {
   const three = riskLevel(city.views["72h"].heavy.probability)
   const week = riskLevel(city.views["7d"].heavy.probability)
   const veryHeavy = (city.views["7d"].very_heavy.probability ?? 0) >= 0.1
   const peak = city.views["7d"].heavy.peak
-  const when = peak ? ` before ${dayLabel(peak.date)}` : ""
-  const around = peak ? ` around ${dayLabel(peak.date)}` : ""
-  const dryDays = city.days.filter((day) => dayKind(day) === "dry").slice(0, 3).map((day) => formatWeekday(day.date))
+  const peakDay = peak ? tr.day(peak.date) : null
+  const dryDays = city.days
+    .filter((day) => dayKind(day) === "dry")
+    .slice(0, 3)
+    .map((day) => tr.weekday(day.date))
+    .join(", ")
   const wet = ground?.kind === "wet" || ground?.kind === "soaked"
   const serious = three === "likely" || three === "very_likely" || week === "likely" || week === "very_likely"
   const watch = !serious && (three === "real" || week === "real" || week === "small" || three === "small")
+  const t = (key: Key, params?: Record<string, string | number>) => tr.t(key, params)
 
   if (three === "unknown" && week === "unknown") {
-    return {
-      farm: ["The forecast models could not be reached. Check the IMD district forecast before planning field work."],
-      business: ["The forecast models could not be reached. Check the IMD district forecast before planning outdoor work."],
-    }
+    return { farm: [t("advice.unknownFarm")], business: [t("advice.unknownBusiness")] }
   }
 
   if (serious) {
     const farm = [
-      `Harvest any crop that is ready and move it under cover${when}.`,
-      "Do not spray pesticide or apply fertiliser now. Rain will wash it off.",
-      "Clear field drains and bunds so water can leave the field.",
-      "Move animals, fodder, and stored grain to higher, covered ground.",
-      "Hold off on sowing or transplanting in low-lying fields until the rain passes.",
+      peakDay ? t("advice.harvestBy", { day: peakDay }) : t("advice.harvestNow"),
+      t("advice.noSpray"),
+      t("advice.clearDrains"),
+      t("advice.moveAnimals"),
+      t("advice.holdSowing"),
     ]
     const business = [
-      `Expect road delays and waterlogging${around}. Move urgent deliveries earlier.`,
-      "Lift stock off warehouse floors and check roof drains and shutters.",
-      "Plan to pause outdoor work, concrete pours, and site excavation on the wettest days.",
-      "Charge phones and backup power. Agree a plan with staff for travel to work.",
+      peakDay ? t("advice.delaysAround", { day: peakDay }) : t("advice.delays"),
+      t("advice.liftStock"),
+      t("advice.pauseWork"),
+      t("advice.power"),
     ]
     if (veryHeavy || wet) {
-      farm.push("Stay away from rivers and nullahs. Never cross a flooded road or causeway.")
-      business.push("Keep people and vehicles away from underpasses and riverside roads.")
+      farm.push(t("advice.rivers"))
+      business.push(t("advice.underpass"))
     }
     return { farm, business }
   }
@@ -224,18 +209,11 @@ export function adviceFor(city: CityDesk, ground: Ground | null): Advice {
   if (watch) {
     return {
       farm: [
-        dryDays.length
-          ? `Plan spraying and harvest for the drier days: ${dryDays.join(", ")}.`
-          : "Keep spraying and harvest flexible this week.",
-        "Keep tarpaulins ready for harvested crop and fodder.",
-        wet
-          ? "Fields are already wet. Open drains now so a heavy shower does not waterlog them."
-          : "Check that field drains are clear.",
+        dryDays ? t("advice.dryDays", { days: dryDays }) : t("advice.flexible"),
+        t("advice.tarps"),
+        wet ? t("advice.openDrainsWet") : t("advice.checkDrains"),
       ],
-      business: [
-        "Keep some slack in delivery and site schedules this week.",
-        "Check roof drains and keep ground-floor stock raised.",
-      ],
+      business: [t("advice.slack"), t("advice.roof")],
     }
   }
 
@@ -244,29 +222,22 @@ export function adviceFor(city: CityDesk, ground: Ground | null): Advice {
     return {
       farm: [
         wetDays === city.days.length
-          ? `Heavy rain is not expected, but showers are likely on all ${wetDays} days.`
-          : `Heavy rain is not expected, but showers are likely on ${wetDays} of the next ${city.days.length} days.`,
-        dryDays.length
-          ? `Spray and apply fertiliser on the drier days (${dryDays.join(", ")}), with a few dry hours afterwards.`
-          : "Spray and apply fertiliser only in dry spells, with a few dry hours afterwards.",
-        `Hold off on irrigation. About ${Math.round(totalMm)} mm of rain is expected over the week.`,
-        "Keep harvested crop covered and dry.",
+          ? t("advice.showersAll", { n: wetDays })
+          : t("advice.showersSome", { n: wetDays, total: city.days.length }),
+        dryDays ? t("advice.sprayDryDays", { days: dryDays }) : t("advice.sprayDrySpells"),
+        t("advice.skipIrrigation", { mm: Math.round(totalMm) }),
+        t("advice.coverHarvest"),
       ],
-      business: [
-        "Showers on most days may slow outdoor work and deliveries a little. Heavy rain is not expected.",
-        "Keep goods in transit covered.",
-      ],
+      business: [t("advice.showersBusiness"), t("advice.coverGoods")],
     }
   }
 
   return {
     farm: [
-      "A good window for spraying, fertiliser, and harvest. Heavy rain is not expected.",
-      ground?.kind === "dry" && totalMm < 10
-        ? "If your crop needs water, plan irrigation. Little rain is expected."
-        : "Check soil moisture before irrigating.",
+      t("advice.goodWindow"),
+      ground?.kind === "dry" && totalMm < 10 ? t("advice.planIrrigation") : t("advice.checkSoil"),
     ],
-    business: ["Normal operations. Heavy rain is not expected to disrupt roads or outdoor work this week."],
+    business: [t("advice.normalBusiness")],
   }
 }
 
@@ -277,42 +248,41 @@ export function weekRain(city: CityDesk): { wetDays: number; totalMm: number } {
   }
 }
 
-export function headline(city: CityDesk): { level: RiskLevel; title: string; detail: string } {
+export function headline(city: CityDesk, tr: Translator = english): { level: RiskLevel; title: string; detail: string } {
   const view = city.views["72h"].heavy
   const level = riskLevel(view.probability)
   if (level === "unknown") {
-    return {
-      level,
-      title: "Forecast not available",
-      detail: "The forecast models could not be reached for this place. Try again in a few minutes.",
-    }
+    return { level, title: tr.t("headline.unknownTitle"), detail: tr.t("headline.unknownDetail") }
   }
-  const peak = view.peak && view.peak.probability >= 0.1 ? ` Most likely on ${dayLabel(view.peak.date)}.` : ""
+  const detail = tr.t("headline.detail", { chance: chanceInWords(view.probability, tr) })
+  const peak = view.peak && view.peak.probability >= 0.1 ? tr.t("headline.peak", { day: tr.day(view.peak.date) }) : null
   return {
     level,
-    title: `Heavy rain in the next 3 days: ${RISK_WORDS[level].toLowerCase()}`,
-    detail: `The chance of at least one day with heavy rain (6.5 cm or more) is ${chanceInWords(view.probability)}.${peak}`,
+    title: tr.t("headline.title", { risk: tr.lower(riskWord(level, tr)) }),
+    detail: peak ? `${detail} ${peak}` : detail,
   }
 }
 
-export function weekLine(city: CityDesk): string {
+export function weekLine(city: CityDesk, tr: Translator = english): string {
   const week = city.views["7d"]
   const heavy = riskLevel(week.heavy.probability)
   if (heavy === "unknown") return ""
   const veryHeavy = week.very_heavy.probability ?? 0
-  const extra =
-    veryHeavy >= 0.1 ? ` Very heavy rain (11.5 cm or more) is also possible, ${chanceInWords(veryHeavy)}.` : ""
-  return `Over the full 7 days, heavy rain is ${RISK_WORDS[heavy].toLowerCase()} (${chanceInWords(week.heavy.probability)}).${extra}`
+  const line = tr.t("week.line", {
+    risk: tr.lower(riskWord(heavy, tr)),
+    chance: chanceInWords(week.heavy.probability, tr),
+  })
+  return veryHeavy >= 0.1 ? `${line} ${tr.t("week.veryHeavy", { chance: chanceInWords(veryHeavy, tr) })}` : line
 }
 
-export function agreement(city: CityDesk): string | null {
+export function agreement(city: CityDesk, tr: Translator = english): string | null {
   const models = city.views["72h"].heavy.byModel.filter((model) => model.probability != null)
   if (models.length < 2) return null
   const [a, b] = models
   const gap = Math.abs((a.probability ?? 0) - (b.probability ?? 0))
-  if (Math.max(a.probability ?? 0, b.probability ?? 0) < 0.1) return "The European and American forecast models both show little heavy rain."
-  if (gap <= 0.15) return "The European and American forecast models broadly agree."
-  return "The European and American forecast models disagree, so this forecast may change. Check again tomorrow."
+  if (Math.max(a.probability ?? 0, b.probability ?? 0) < 0.1) return tr.t("agree.bothLow")
+  if (gap <= 0.15) return tr.t("agree.agree")
+  return tr.t("agree.disagree")
 }
 
 export function nearestCity<T extends { lat: number; lon: number }>(

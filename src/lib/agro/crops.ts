@@ -1,3 +1,5 @@
+import { english, type Translator } from "../i18n"
+
 export type IrrigationNeed = "normal" | "critical" | "light" | "ponded" | "stop"
 
 export type Stage = {
@@ -18,6 +20,7 @@ export type Stage = {
 }
 
 export type Disease = {
+  id: string
   name: string
   tMin: number
   tMax: number
@@ -73,8 +76,8 @@ export const CROPS: Crop[] = [
       { id: "maturity", name: "Maturity and harvest", from: 121, to: 140, kc: 0.3, irrigation: "stop", harvest: true, focus: "Stop irrigating. Harvest when grain is hard and straw is golden, on dry days." },
     ],
     diseases: [
-      { name: "Yellow rust", tMin: 10, tMax: 20, wetHours: 6, stages: ["tillering", "jointing", "flowering"], scout: "Look for yellow powdery stripes on leaves, starting in patches." },
-      { name: "Leaf blight", tMin: 18, tMax: 28, wetHours: 10, stages: ["jointing", "flowering", "grain_fill"], scout: "Look for brown oval spots with yellow edges on lower leaves." },
+      { id: "yellow_rust", name: "Yellow rust", tMin: 10, tMax: 20, wetHours: 6, stages: ["tillering", "jointing", "flowering"], scout: "Look for yellow powdery stripes on leaves, starting in patches." },
+      { id: "leaf_blight", name: "Leaf blight", tMin: 18, tMax: 28, wetHours: 10, stages: ["jointing", "flowering", "grain_fill"], scout: "Look for brown oval spots with yellow edges on lower leaves." },
     ],
   },
   {
@@ -96,8 +99,8 @@ export const CROPS: Crop[] = [
       { id: "maturity", name: "Maturity and harvest", from: 101, to: 115, kc: 0.6, irrigation: "stop", harvest: true, focus: "Drain the field about 10 days before harvest. Harvest on dry days and dry the grain quickly." },
     ],
     diseases: [
-      { name: "Blast", tMin: 20, tMax: 28, wetHours: 10, stages: ["tillering", "panicle", "flowering"], scout: "Look for eye-shaped grey spots with brown edges on leaves and neck." },
-      { name: "Sheath blight", tMin: 26, tMax: 33, wetHours: 12, stages: ["tillering", "panicle", "flowering", "grain_fill"], scout: "Look for grey-green blotches on the sheath near the water line." },
+      { id: "blast", name: "Blast", tMin: 20, tMax: 28, wetHours: 10, stages: ["tillering", "panicle", "flowering"], scout: "Look for eye-shaped grey spots with brown edges on leaves and neck." },
+      { id: "sheath_blight", name: "Sheath blight", tMin: 26, tMax: 33, wetHours: 12, stages: ["tillering", "panicle", "flowering", "grain_fill"], scout: "Look for grey-green blotches on the sheath near the water line." },
     ],
   },
   {
@@ -119,8 +122,8 @@ export const CROPS: Crop[] = [
       { id: "picking", name: "Final picking", from: 151, to: 180, kc: 0.6, irrigation: "stop", harvest: true, focus: "Stop irrigating. Finish picking and destroy stalks to break the pink bollworm cycle." },
     ],
     diseases: [
-      { name: "Boll rot", tMin: 25, tMax: 33, wetHours: 12, stages: ["flowering", "boll_open"], scout: "Look for dark, soft lower bolls after spells of humid weather." },
-      { name: "Grey mildew", tMin: 20, tMax: 30, wetHours: 10, stages: ["squaring", "flowering"], scout: "Look for pale angular spots with white powder under the leaves." },
+      { id: "boll_rot", name: "Boll rot", tMin: 25, tMax: 33, wetHours: 12, stages: ["flowering", "boll_open"], scout: "Look for dark, soft lower bolls after spells of humid weather." },
+      { id: "grey_mildew", name: "Grey mildew", tMin: 20, tMax: 30, wetHours: 10, stages: ["squaring", "flowering"], scout: "Look for pale angular spots with white powder under the leaves." },
     ],
   },
   {
@@ -141,7 +144,7 @@ export const CROPS: Crop[] = [
       { id: "maturity", name: "Maturity and harvest", from: 96, to: 110, kc: 0.5, irrigation: "stop", harvest: true, focus: "Harvest when husks are dry and grain shows a black layer. Dry cobs before storage." },
     ],
     diseases: [
-      { name: "Turcicum leaf blight", tMin: 18, tMax: 27, wetHours: 10, stages: ["vegetative", "tasseling", "grain_fill"], scout: "Look for long grey-green cigar-shaped lesions on leaves." },
+      { id: "turcicum", name: "Turcicum leaf blight", tMin: 18, tMax: 27, wetHours: 10, stages: ["vegetative", "tasseling", "grain_fill"], scout: "Look for long grey-green cigar-shaped lesions on leaves." },
     ],
   },
   {
@@ -162,8 +165,8 @@ export const CROPS: Crop[] = [
       { id: "maturity", name: "Maturity and harvest", from: 91, to: 105, kc: 0.5, irrigation: "stop", harvest: true, focus: "Harvest when most pods turn brown. Rain at harvest causes shattering and poor seed." },
     ],
     diseases: [
-      { name: "Rust", tMin: 18, tMax: 28, wetHours: 10, stages: ["flowering", "pod_fill"], scout: "Look for tan to reddish-brown pustules under lower leaves." },
-      { name: "Anthracnose and pod blight", tMin: 25, tMax: 32, wetHours: 12, stages: ["flowering", "pod_fill"], scout: "Look for dark sunken spots on stems and pods." },
+      { id: "rust", name: "Rust", tMin: 18, tMax: 28, wetHours: 10, stages: ["flowering", "pod_fill"], scout: "Look for tan to reddish-brown pustules under lower leaves." },
+      { id: "anthracnose", name: "Anthracnose and pod blight", tMin: 25, tMax: 32, wetHours: 12, stages: ["flowering", "pod_fill"], scout: "Look for dark sunken spots on stems and pods." },
     ],
   },
   {
@@ -184,8 +187,8 @@ export const CROPS: Crop[] = [
       { id: "maturity", name: "Maturity and harvest", from: 101, to: 120, kc: 0.35, irrigation: "stop", harvest: true, focus: "Harvest when leaves turn reddish-brown and pods rattle." },
     ],
     diseases: [
-      { name: "Botrytis grey mould", tMin: 18, tMax: 26, wetHours: 10, stages: ["flowering", "pod_fill"], scout: "Look for grey fuzzy growth on flowers and pods in dense patches." },
-      { name: "Ascochyta blight", tMin: 15, tMax: 25, wetHours: 12, stages: ["branching", "flowering", "pod_fill"], scout: "Look for brown spots with dark rings on leaves, stems, and pods." },
+      { id: "botrytis", name: "Botrytis grey mould", tMin: 18, tMax: 26, wetHours: 10, stages: ["flowering", "pod_fill"], scout: "Look for grey fuzzy growth on flowers and pods in dense patches." },
+      { id: "ascochyta", name: "Ascochyta blight", tMin: 15, tMax: 25, wetHours: 12, stages: ["branching", "flowering", "pod_fill"], scout: "Look for brown spots with dark rings on leaves, stems, and pods." },
     ],
   },
   {
@@ -215,9 +218,9 @@ export const CROPS: Crop[] = [
       { id: "maturity", name: "Maturity and harvest", from: 106, to: 125, kc: 0.35, irrigation: "stop", harvest: true, focus: "Harvest when about three-quarters of pods turn yellow, in the morning, to cut shattering." },
     ],
     diseases: [
-      { name: "Aphids", tMin: 10, tMax: 20, wetHours: 12, rh: 75, stages: ["flowering", "pod_fill"], scout: "Check the top 10 cm of shoots; act when about a quarter of plants carry colonies." },
-      { name: "Alternaria blight", tMin: 18, tMax: 27, wetHours: 10, stages: ["flowering", "pod_fill"], scout: "Look for round brown spots with rings on leaves and pods." },
-      { name: "White rust", tMin: 10, tMax: 20, wetHours: 8, stages: ["rosette", "flowering"], scout: "Look for white blisters under leaves." },
+      { id: "aphids", name: "Aphids", tMin: 10, tMax: 20, wetHours: 12, rh: 75, stages: ["flowering", "pod_fill"], scout: "Check the top 10 cm of shoots; act when about a quarter of plants carry colonies." },
+      { id: "alternaria", name: "Alternaria blight", tMin: 18, tMax: 27, wetHours: 10, stages: ["flowering", "pod_fill"], scout: "Look for round brown spots with rings on leaves and pods." },
+      { id: "white_rust", name: "White rust", tMin: 10, tMax: 20, wetHours: 8, stages: ["rosette", "flowering"], scout: "Look for white blisters under leaves." },
     ],
   },
   {
@@ -238,10 +241,42 @@ export const CROPS: Crop[] = [
       { id: "maturity", name: "Maturity and dehaulming", from: 86, to: 100, kc: 0.7, irrigation: "stop", harvest: true, focus: "Stop irrigating about 10 days before cutting haulms. Dig 10–15 days after dehaulming so skins set." },
     ],
     diseases: [
-      { name: "Late blight", tMin: 10, tMax: 25, wetHours: 10, stages: ["vegetative", "tuber_init", "bulking"], scout: "Look for dark water-soaked patches on leaves with white growth underneath in the morning." },
+      { id: "late_blight", name: "Late blight", tMin: 10, tMax: 25, wetHours: 10, stages: ["vegetative", "tuber_init", "bulking"], scout: "Look for dark water-soaked patches on leaves with white growth underneath in the morning." },
     ],
   },
 ]
+
+function lookup(tr: Translator, key: string, fallback: string): string {
+  return tr.has(key) ? tr.t(key) : fallback
+}
+
+export function cropName(crop: Crop, tr: Translator = english): string {
+  return lookup(tr, `crop.${crop.id}.name`, crop.name)
+}
+
+export function cropSeason(crop: Crop, tr: Translator = english): string {
+  return lookup(tr, `crop.${crop.id}.season`, crop.season)
+}
+
+export function stageName(crop: Crop, stage: Stage, tr: Translator = english): string {
+  return lookup(tr, `stage.${crop.id}.${stage.id}.name`, stage.name)
+}
+
+export function stageFocus(crop: Crop, stage: Stage, tr: Translator = english): string {
+  return lookup(tr, `stage.${crop.id}.${stage.id}.focus`, stage.focus)
+}
+
+export function stageNitrogen(crop: Crop, stage: Stage, tr: Translator = english): string | null {
+  return stage.nitrogen ? lookup(tr, `stage.${crop.id}.${stage.id}.nitrogen`, stage.nitrogen) : null
+}
+
+export function diseaseName(crop: Crop, disease: Disease, tr: Translator = english): string {
+  return lookup(tr, `disease.${crop.id}.${disease.id}.name`, disease.name)
+}
+
+export function diseaseScout(crop: Crop, disease: Disease, tr: Translator = english): string {
+  return lookup(tr, `disease.${crop.id}.${disease.id}.scout`, disease.scout)
+}
 
 export function cropById(id: string | null | undefined): Crop | null {
   return CROPS.find((crop) => crop.id === id) ?? null

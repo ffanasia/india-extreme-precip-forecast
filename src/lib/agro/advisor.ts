@@ -1,22 +1,38 @@
-import { addDays, diffDays, formatDay, formatWeekday, parseIso } from "../dates"
+import { addDays, diffDays, parseIso } from "../dates"
+import { english, type Key, type Params, type Translator } from "../i18n"
 import { ozoneStress, summariseAirDay } from "./air"
-import { stageOn, type Crop, type Stage } from "./crops"
+import {
+  cropName,
+  diseaseName,
+  diseaseScout,
+  stageFocus,
+  stageName,
+  stageNitrogen,
+  stageOn,
+  type Crop,
+  type Stage,
+} from "./crops"
 import type { DayAir, FarmPoint, WeatherHour } from "./types"
 
 export type Verdict = "good" | "fair" | "avoid" | "none"
 export type ActivityId = "sow" | "spray" | "fertilise" | "irrigate" | "harvest" | "fieldwork"
 
-export const ACTIVITY_LABEL: Record<ActivityId, string> = {
-  sow: "Sow",
-  spray: "Spray",
-  fertilise: "Top-dress fertiliser",
-  irrigate: "Irrigate",
-  harvest: "Harvest",
-  fieldwork: "Field work",
+export function activityLabel(id: ActivityId, tr: Translator = english): string {
+  return tr.t(`activity.${id}`)
 }
 
+/** Labels are display text; `tag` marks the cases the planner logic needs to recognise. */
+export type ActivityTag = "frost" | "waitRain" | "preSow"
+
 /** `score` ranks days with the same verdict; higher is better. Without it the earliest day wins. */
-export type DayActivity = { verdict: Verdict; label: string; reason: string; window?: string; score?: number }
+export type DayActivity = {
+  verdict: Verdict
+  label: string
+  reason: string
+  window?: string
+  score?: number
+  tag?: ActivityTag
+}
 
 export type DayWeather = {
   tMax: number | null
@@ -52,6 +68,7 @@ export type FarmAlert = {
   dates: string[]
   title: string
   detail: string
+  diseaseId?: string
 }
 
 export type BestPick = { activity: ActivityId; date: string | null; window?: string; verdict: Verdict; text: string; reason: string }
@@ -77,6 +94,7 @@ export type PlanInput = {
   today: string
   lastIrrigated?: string | null
   heavyChance?: Map<string, number | null>
+  tr?: Translator
 }
 
 /** Volumetric soil water at field capacity and wilting point for a medium loam. */
@@ -91,7 +109,21 @@ export function hourOf(time: string): number {
   return Number(time.slice(11, 13))
 }
 
-export function formatHourRange(start: number, endExclusive: number): string {
+function periodOf(hour: number): Key {
+  if (hour < 5 || hour >= 20) return "period.night"
+  if (hour < 12) return "period.morning"
+  if (hour < 16) return "period.afternoon"
+  return "period.evening"
+}
+
+export function formatHourRange(start: number, endExclusive: number, tr: Translator = english): string {
+  if (tr.lang !== "en") {
+    const twelve = (hour: number) => (hour % 12 === 0 ? 12 : hour % 12)
+    const p1 = periodOf(start % 24)
+    const p2 = periodOf((endExclusive - 1) % 24)
+    if (p1 === p2) return tr.t("hours.same", { period: tr.t(p1), from: twelve(start), to: twelve(endExclusive) })
+    return tr.t("hours.cross", { p1: tr.t(p1), from: twelve(start), p2: tr.t(periodOf(endExclusive % 24)), to: twelve(endExclusive) })
+  }
   const label = (hour: number) => {
     const h = hour % 24
     const suffix = h < 12 ? "am" : "pm"
@@ -104,8 +136,8 @@ export function formatHourRange(start: number, endExclusive: number): string {
   return `${a.twelve} ${a.suffix}–${b.twelve} ${b.suffix}`
 }
 
-export function dayName(iso: string): string {
-  return `${formatWeekday(iso)} ${formatDay(iso)}`
+export function dayName(iso: string, tr: Translator = english): string {
+  return tr.day(iso)
 }
 
 function mean(values: (number | null)[]): number | null {
@@ -196,12 +228,12 @@ export function sprayHour(all: WeatherHour[], index: number, strict: boolean): S
   return "ok"
 }
 
-const SPRAY_REASON: Record<Exclude<SprayCheck, "ok" | "night">, string> = {
-  rain: "Rain is due within a few hours and would wash the spray off.",
-  windy: "Too windy: spray would drift onto neighbouring fields and people.",
-  calm: "Air is too still: fine droplets hang and drift unpredictably.",
-  hot: "Too hot: spray evaporates before it works and can scorch leaves.",
-  dry: "Air is very dry: droplets evaporate before reaching the leaf.",
+const SPRAY_REASON: Record<Exclude<SprayCheck, "ok" | "night">, Key> = {
+  rain: "spray.rain",
+  windy: "spray.windy",
+  calm: "spray.calm",
+  hot: "spray.hot",
+  dry: "spray.dry",
 }
 
 function dominant<T extends string>(checks: T[], skip: T[]): T | null {
@@ -215,36 +247,35 @@ function dominant<T extends string>(checks: T[], skip: T[]): T | null {
   return best
 }
 
-function sprayFor(all: WeatherHour[], indices: number[]): DayActivity {
+function sprayFor(all: WeatherHour[], indices: number[], tr: Translator): DayActivity {
   const strict = indices.map((index) => ({ hour: hourOf(all[index].time), check: sprayHour(all, index, true) }))
   const strictRun = longestRun(strict.map((item) => ({ hour: item.hour, ok: item.check === "ok" })))
   if (strictRun && strictRun.hours >= 3) {
-    const window = formatHourRange(strictRun.start, strictRun.end)
-    return {
-      verdict: "good",
-      label: window,
-      window,
-      score: strictRun.hours,
-      reason: "Light wind, no rain for several hours, and mild temperature.",
-    }
+    const window = formatHourRange(strictRun.start, strictRun.end, tr)
+    return { verdict: "good", label: window, window, score: strictRun.hours, reason: tr.t("spray.good") }
   }
   const relaxed = indices.map((index) => ({ hour: hourOf(all[index].time), ok: sprayHour(all, index, false) === "ok" }))
   const relaxedRun = longestRun(relaxed)
   const blocker = dominant(strict.map((item) => item.check), ["ok", "night"]) as keyof typeof SPRAY_REASON | null
   if (relaxedRun && relaxedRun.hours >= 2) {
-    const window = formatHourRange(relaxedRun.start, relaxedRun.end)
+    const window = formatHourRange(relaxedRun.start, relaxedRun.end, tr)
     return {
       verdict: "fair",
       label: window,
       window,
       score: relaxedRun.hours,
-      reason: `Only a short or marginal window. ${blocker ? SPRAY_REASON[blocker] : ""}`.trim(),
+      reason: blocker ? `${tr.t("spray.marginal")} ${tr.t(SPRAY_REASON[blocker])}` : tr.t("spray.marginal"),
     }
   }
-  return { verdict: "avoid", label: "No window", reason: blocker ? SPRAY_REASON[blocker] : "No suitable hours today." }
+  return { verdict: "avoid", label: tr.t("spray.noWindow"), reason: tr.t(blocker ? SPRAY_REASON[blocker] : "spray.noHours") }
 }
 
-function fieldworkFor(all: WeatherHour[], indices: number[], airByTime: Map<string, number | null>): DayActivity {
+function fieldworkFor(
+  all: WeatherHour[],
+  indices: number[],
+  airByTime: Map<string, number | null>,
+  tr: Translator,
+): DayActivity {
   const flags = indices
     .filter((index) => {
       const h = hourOf(all[index].time)
@@ -270,32 +301,23 @@ function fieldworkFor(all: WeatherHour[], indices: number[], airByTime: Map<stri
         : wet > 0
           ? "rain"
           : null
-  const outside = {
-    smoke: "Unhealthy air outside these hours. Wear an N95 mask for long shifts.",
-    heat: "Too hot outside these hours. Rest in shade and drink water often.",
-    rain: "Rain outside these hours.",
-  }
-  const blocked = {
-    smoke: "Air is unhealthy for much of the day. Wear an N95 mask and take breaks.",
-    heat: "Heat stress for much of the day. Work early or late and drink water often.",
-    rain: "Rain for much of the day.",
-  }
+  const outside: Record<string, Key> = { smoke: "work.outsideSmoke", heat: "work.outsideHeat", rain: "work.outsideRain" }
+  const blocked: Record<string, Key> = { smoke: "work.blockedSmoke", heat: "work.blockedHeat", rain: "work.blockedRain" }
   if (run && run.hours >= 6) {
-    const window = formatHourRange(run.start, run.end)
+    const window = formatHourRange(run.start, run.end, tr)
     return {
       verdict: "good",
       label: window,
       window,
       score: run.hours,
-      reason: issue ? outside[issue] : "Comfortable conditions for outdoor work all day.",
+      reason: tr.t(issue ? outside[issue] : "work.comfortable"),
     }
   }
   if (run && run.hours >= 2) {
-    const window = formatHourRange(run.start, run.end)
-    return { verdict: "fair", label: window, window, score: run.hours, reason: issue ? blocked[issue] : "Only part of the day is comfortable." }
+    const window = formatHourRange(run.start, run.end, tr)
+    return { verdict: "fair", label: window, window, score: run.hours, reason: tr.t(issue ? blocked[issue] : "work.partial") }
   }
-  if (issue) return { verdict: "avoid", label: "Limit work", reason: blocked[issue] }
-  return { verdict: "avoid", label: "Limit work", reason: issue || "Conditions are poor for outdoor work all day." }
+  return { verdict: "avoid", label: tr.t("work.limit"), reason: tr.t(issue ? blocked[issue] : "work.allPoor") }
 }
 
 function harvestFor(
@@ -304,6 +326,7 @@ function harvestFor(
   indices: number[],
   today: DayWeather,
   tomorrow: DayWeather | null,
+  tr: Translator,
 ): DayActivity {
   const picked = crop.id === "cotton"
   const flags = indices
@@ -318,36 +341,23 @@ function harvestFor(
   const run = longestRun(flags)
   const nextRain = tomorrow?.rain ?? 0
   if (today.rain >= 2 || (today.rainProbMax ?? 0) >= 60) {
-    return { verdict: "avoid", label: "Rain", reason: picked ? "Rain today would wet open bolls." : "Rain today would wet the cut crop." }
+    return { verdict: "avoid", label: tr.t("harvest.rainLabel"), reason: tr.t(picked ? "harvest.rainPick" : "harvest.rainCut") }
   }
   if (run && run.hours >= 5 && nextRain < 2) {
-    const window = formatHourRange(run.start, run.end)
-    return {
-      verdict: "good",
-      label: window,
-      window,
-      score: run.hours,
-      reason: picked
-        ? "Dry: pick once the dew has lifted so the lint stays clean."
-        : "Dry, with no rain due tomorrow, so the cut crop can dry in the field.",
-    }
+    const window = formatHourRange(run.start, run.end, tr)
+    return { verdict: "good", label: window, window, score: run.hours, reason: tr.t(picked ? "harvest.goodPick" : "harvest.goodCut") }
   }
   if (run && run.hours >= 3) {
-    const window = formatHourRange(run.start, run.end)
+    const window = formatHourRange(run.start, run.end, tr)
     return {
       verdict: "fair",
       label: window,
       window,
       score: run.hours,
-      reason:
-        nextRain >= 2
-          ? picked
-            ? "Dry today, but rain tomorrow. Pick open bolls today."
-            : "Dry today, but rain tomorrow. Cut only what you can bring in and cover."
-          : "Humid. Produce will dry slowly; dry it fully before storing.",
+      reason: tr.t(nextRain >= 2 ? (picked ? "harvest.tomorrowPick" : "harvest.tomorrowCut") : "harvest.humid"),
     }
   }
-  return { verdict: "avoid", label: "Too humid", reason: "Humid or showery all day. The crop will stay damp." }
+  return { verdict: "avoid", label: tr.t("harvest.humidLabel"), reason: tr.t("harvest.damp") }
 }
 
 function fertiliseFor(
@@ -358,75 +368,75 @@ function fertiliseFor(
   heavyNext: number | null,
   irrigating: boolean,
   crop: Crop,
+  tr: Translator,
 ): DayActivity {
-  if (!stage?.nitrogen) return { verdict: "none", label: "Not due", reason: "No nitrogen dose is due at this stage." }
+  if (!stage?.nitrogen) return { verdict: "none", label: tr.t("fert.notDue"), reason: tr.t("fert.notDueReason") }
   const nextRain = next?.rain ?? 0
   if ((heavyToday ?? 0) >= 0.1 || (heavyNext ?? 0) >= 0.1) {
-    return { verdict: "avoid", label: "Heavy rain", reason: "Heavy rain is possible within two days and would wash fertiliser off the field." }
+    return { verdict: "avoid", label: tr.t("fert.heavyLabel"), reason: tr.t("fert.heavyReason") }
   }
   if (day.rain >= 15 || nextRain >= 20) {
     return {
       verdict: "avoid",
-      label: "Rain due",
-      reason: `About ${Math.round(Math.max(day.rain, nextRain))} mm of rain in a day would carry fertiliser off the field.`,
+      label: tr.t("fert.rainLabel"),
+      reason: tr.t("fert.rainReason", { mm: Math.round(Math.max(day.rain, nextRain)) }),
     }
   }
   if ((day.soilTop ?? 0) >= WATERLOGGED && crop.id !== "rice") {
-    return { verdict: "avoid", label: "Too wet", reason: "The field is waterlogged. Nitrogen is lost from saturated soil." }
+    return { verdict: "avoid", label: tr.t("fert.wetLabel"), reason: tr.t("fert.wetReason") }
   }
   if (crop.id === "rice") {
-    return { verdict: "good", label: "Good", reason: "Lower standing water to a thin layer, broadcast, and do not drain for two days." }
+    return { verdict: "good", label: tr.t("common.good"), reason: tr.t("fert.rice") }
   }
   const lightRain = day.rain + nextRain >= 2 && day.rain + nextRain < 15
   if (irrigating || lightRain || (day.soilTop ?? 0) >= 0.22) {
     return {
       verdict: "good",
-      label: "Good",
-      reason: irrigating
-        ? "Apply just before today's irrigation so it soaks in."
-        : lightRain
-          ? "Light rain is due to wash it into the soil, with no heavy rain to wash it away."
-          : "Soil is moist and no heavy rain is due for two days.",
+      label: tr.t("common.good"),
+      reason: tr.t(irrigating ? "fert.withIrrigation" : lightRain ? "fert.lightRain" : "fert.moist"),
     }
   }
-  return { verdict: "fair", label: "Dry soil", reason: "Soil is dry. Apply just before you irrigate so it is not lost to the air." }
+  return { verdict: "fair", label: tr.t("fert.dryLabel"), reason: tr.t("fert.dryReason") }
 }
 
-function sowFor(crop: Crop, date: string, day: DayWeather, next: DayWeather | null, heavyNext: number | null): DayActivity {
+function sowFor(
+  crop: Crop,
+  date: string,
+  day: DayWeather,
+  next: DayWeather | null,
+  heavyNext: number | null,
+  tr: Translator,
+): DayActivity {
+  const name = tr.lower(cropName(crop, tr))
   const month = parseIso(date).month
   const [low, high] = crop.sowTemp
   const temp = day.tMean
   const inSeason = crop.sowMonths.includes(month)
   const nextRain = (next?.rain ?? 0) + day.rain
   if ((day.soilTop ?? 0) >= WATERLOGGED && crop.id !== "rice") {
-    return { verdict: "avoid", label: "Too wet", reason: "The field is waterlogged. Seed will rot and the soil will crust." }
+    return { verdict: "avoid", label: tr.t("sow.wetLabel"), reason: tr.t("sow.wetReason") }
   }
   if (nextRain >= 25 || (heavyNext ?? 0) >= 0.1) {
-    return { verdict: "avoid", label: "Heavy rain", reason: "Heavy rain right after sowing washes seed out and crusts the soil." }
+    return { verdict: "avoid", label: tr.t("sow.heavyLabel"), reason: tr.t("sow.heavyReason") }
   }
   if (temp != null && (temp < low - 2 || temp > high + 2)) {
     return {
       verdict: "avoid",
-      label: temp < low ? "Too cold" : "Too hot",
-      reason: `Average temperature about ${Math.round(temp)} °C. ${crop.name} germinates best between ${low} and ${high} °C.`,
+      label: tr.t(temp < low ? "sow.coldLabel" : "sow.hotLabel"),
+      reason: tr.t("sow.tempReason", { temp: Math.round(temp), crop: cropName(crop, tr), low, high }),
     }
   }
   const notes: string[] = []
-  if (!inSeason) notes.push(`This is outside the usual ${crop.startLabel} months for ${crop.name.toLowerCase()}.`)
-  if (temp != null && (temp < low || temp > high)) notes.push(`Temperature is just outside the best range (${low}–${high} °C).`)
+  if (!inSeason) notes.push(tr.t("sow.offSeason", { crop: name }))
+  if (temp != null && (temp < low || temp > high)) notes.push(tr.t("sow.tempEdge", { low, high }))
   if (crop.id === "rice") {
-    if (nextRain < 5 && (day.soilTop ?? 0) < 0.3) notes.push("Puddle the field with standing water before transplanting.")
+    if (nextRain < 5 && (day.soilTop ?? 0) < 0.3) notes.push(tr.t("sow.puddle"))
   } else if ((day.soilTop ?? 1) < DRY_TOPSOIL) {
-    notes.push("Topsoil is dry. Give a pre-sowing irrigation and sow when the soil is workable.")
+    notes.push(tr.t("sow.dryTop"))
   }
   const score = temp == null ? 0 : -Math.abs(temp - (low + high) / 2)
-  if (notes.length) return { verdict: "fair", label: "Possible", reason: notes.join(" "), score }
-  return {
-    verdict: "good",
-    label: "Good",
-    reason: `Temperature suits ${crop.name.toLowerCase()}, soil is workable, and no heavy rain is due.`,
-    score,
-  }
+  if (notes.length) return { verdict: "fair", label: tr.t("common.possible"), reason: notes.join(" "), score }
+  return { verdict: "good", label: tr.t("common.good"), reason: tr.t("sow.good", { crop: name }), score }
 }
 
 export function bestDay(days: DayPlan[], activity: ActivityId, verdict: Verdict): DayPlan | null {
@@ -450,9 +460,9 @@ function groupDates(dates: string[]): string[][] {
   return groups
 }
 
-export function spanLabel(dates: string[]): string {
-  if (dates.length === 1) return dayName(dates[0])
-  return `${dayName(dates[0])} – ${dayName(dates[dates.length - 1])}`
+export function spanLabel(dates: string[], tr: Translator = english): string {
+  if (dates.length === 1) return tr.day(dates[0])
+  return tr.t("span.range", { from: tr.day(dates[0]), to: tr.day(dates[dates.length - 1]) })
 }
 
 export function wetHours(hours: WeatherHour[], tMin: number, tMax: number, rh = 90): number {
@@ -464,6 +474,8 @@ export function wetHours(hours: WeatherHour[], tMin: number, tMax: number, rh = 
 
 export function buildPlan(input: PlanInput): FarmPlan {
   const { point, crop, sownOn, today } = input
+  const tr = input.tr ?? english
+  const t = (key: Key, params?: Params) => tr.t(key, params)
   const all = point.weather
   const byDate = new Map<string, number[]>()
   all.forEach((hour, index) => {
@@ -521,52 +533,49 @@ export function buildPlan(input: PlanInput): FarmPlan {
     const deficitToday = deficit
     let irrigate: DayActivity
     if (stage?.irrigation === "stop") {
-      irrigate = { verdict: "none", label: "Stop", reason: "Stop irrigating so the crop dries down for harvest." }
+      irrigate = { verdict: "none", label: t("irr.stopLabel"), reason: t("irr.stop") }
     } else if ((weather.soilTop ?? 0) >= WATERLOGGED || weather.rain >= 20) {
-      irrigate = { verdict: "avoid", label: "Too wet", reason: "Soil is saturated. Open drains instead." }
+      irrigate = { verdict: "avoid", label: t("irr.wetLabel"), reason: t("irr.wet") }
     } else if (growing && stage?.coldMin != null && next?.tMin != null && next.tMin <= stage.coldMin) {
-      irrigate = { verdict: "good", label: "Evening", reason: `Frost risk tonight (${Math.round(next.tMin)} °C). A light irrigation this evening keeps the crop warmer.` }
+      irrigate = { verdict: "good", tag: "frost", label: t("irr.frostLabel"), reason: t("irr.frost", { temp: Math.round(next.tMin) }) }
     } else if (deficit >= threshold) {
+      const used = { mm: Math.round(deficit) }
       irrigate =
         rainSoon >= 10
-          ? { verdict: "avoid", label: "Wait for rain", reason: `About ${Math.round(rainSoon)} mm of rain is due within two days.` }
+          ? { verdict: "avoid", tag: "waitRain", label: t("irr.waitLabel"), reason: t("irr.wait", { mm: Math.round(rainSoon) }) }
           : {
               verdict: "good",
-              label: "Irrigate",
-              reason: ponded
-                ? "Standing water will have dropped by about 3 cm. Top up to 5 cm."
-                : stage?.irrigation === "critical"
-                  ? `Root-zone water is running low at a stage that is sensitive to stress (about ${Math.round(deficit)} mm used).`
-                  : `Root-zone water is running low (about ${Math.round(deficit)} mm used).`,
+              label: t("irr.goLabel"),
+              reason: ponded ? t("irr.rice") : t(stage?.irrigation === "critical" ? "irr.critical" : "irr.low", used),
             }
     } else if (growing && stage?.heatMax != null && next?.tMax != null && next.tMax >= stage.heatMax && rainSoon < 5) {
-      irrigate = { verdict: "fair", label: "Before heat", reason: `Hot day tomorrow (${Math.round(next.tMax)} °C). Irrigating today helps the crop cope.` }
+      irrigate = { verdict: "fair", label: t("irr.heatLabel"), reason: t("irr.heat", { temp: Math.round(next.tMax) }) }
     } else if (deficit >= threshold * 0.75 && rainSoon < 10) {
-      irrigate = { verdict: "fair", label: "Soon", reason: `Soil water is getting low (about ${Math.round(deficit)} mm used).` }
+      irrigate = { verdict: "fair", label: t("irr.soonLabel"), reason: t("irr.soon", { mm: Math.round(deficit) }) }
     } else {
-      irrigate = { verdict: "none", label: "Not needed", reason: weather.rain >= 5 ? "Rain is doing the job." : "Soil still has enough water." }
+      irrigate = { verdict: "none", label: t("common.notNeeded"), reason: t(weather.rain >= 5 ? "irr.rainDoing" : "irr.enough") }
     }
-    if (stage?.irrigation === "light" && irrigate.verdict === "good" && !irrigate.label.startsWith("Evening")) {
-      irrigate = { ...irrigate, reason: `${irrigate.reason} Keep it light at this stage.` }
+    if (stage?.irrigation === "light" && irrigate.verdict === "good" && irrigate.tag !== "frost") {
+      irrigate = { ...irrigate, reason: `${irrigate.reason} ${t("irr.lightNote")}` }
     }
     if (!growing && irrigate.verdict === "good") {
-      irrigate = { ...irrigate, label: "Pre-sowing", reason: "Soil is dry. A pre-sowing irrigation gives a moist seed bed." }
+      irrigate = { ...irrigate, tag: "preSow", label: t("irr.preSowLabel"), reason: t("irr.preSow") }
     }
     activities.irrigate = irrigate
-    if (irrigate.verdict === "good" && !irrigate.label.startsWith("Evening")) deficit = 0
+    if (irrigate.verdict === "good" && irrigate.tag !== "frost") deficit = 0
     deficit = Math.min(totalWater * (ponded ? 2 : 1), Math.max(0, deficit + etc + (ponded ? RICE_PERCOLATION_MM : 0) - effectiveRain))
 
     if (!growing) {
-      activities.sow = sowFor(crop, date, weather, next, heavy(addDays(date, 1)))
+      activities.sow = sowFor(crop, date, weather, next, heavy(addDays(date, 1)), tr)
     } else {
       activities.spray =
         stage?.irrigation === "stop"
-          ? { verdict: "none", label: "Not needed", reason: "Spraying this close to harvest rarely pays and can leave residues." }
-          : sprayFor(all, indices)
-      activities.fertilise = fertiliseFor(stage, weather, next, heavy(date), heavy(addDays(date, 1)), irrigate.verdict === "good", crop)
-      if (stage?.harvest) activities.harvest = harvestFor(crop, all, indices, weather, next)
+          ? { verdict: "none", label: t("common.notNeeded"), reason: t("spray.nearHarvest") }
+          : sprayFor(all, indices, tr)
+      activities.fertilise = fertiliseFor(stage, weather, next, heavy(date), heavy(addDays(date, 1)), irrigate.verdict === "good", crop, tr)
+      if (stage?.harvest) activities.harvest = harvestFor(crop, all, indices, weather, next, tr)
     }
-    activities.fieldwork = fieldworkFor(all, indices, airByTime)
+    activities.fieldwork = fieldworkFor(all, indices, airByTime, tr)
 
     return {
       date,
@@ -598,7 +607,7 @@ export function buildPlan(input: PlanInput): FarmPlan {
         activity,
         date: null,
         verdict: none ? "none" : "avoid",
-        text: none ? (activity === "irrigate" ? "Not needed this week" : "Not due this week") : "No suitable day this week",
+        text: t(none ? (activity === "irrigate" ? "best.notNeeded" : "best.notDue") : "best.noDay"),
         reason: sample?.reason ?? "",
       }
     }
@@ -608,12 +617,12 @@ export function buildPlan(input: PlanInput): FarmPlan {
       date: pick.date,
       window: item.window,
       verdict: item.verdict,
-      text: item.window ? `${dayName(pick.date)}, ${item.window}` : dayName(pick.date),
+      text: item.window ? t("best.window", { day: tr.day(pick.date), window: item.window }) : tr.day(pick.date),
       reason: item.reason,
     }
   })
 
-  const alerts = buildAlerts(crop, days, point)
+  const alerts = buildAlerts(crop, days, point, tr)
   const dasToday = sownOn ? diffDays(sownOn, today) : null
   const stageToday = dasToday != null && dasToday >= 0 ? stageOn(crop, dasToday) : null
   let nextStage: FarmPlan["nextStage"] = null
@@ -639,12 +648,13 @@ export function buildPlan(input: PlanInput): FarmPlan {
     insights: [],
     air: { worst },
   }
-  plan.insights = buildInsights(plan, point)
+  plan.insights = buildInsights(plan, point, tr)
   return plan
 }
 
-function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[] {
+function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint, tr: Translator): FarmAlert[] {
   const alerts: FarmAlert[] = []
+  const name = tr.lower(cropName(crop, tr))
   const hoursOf = (date: string) => point.weather.filter((hour) => hour.time.startsWith(date))
 
   const heatDays = days.filter((day) => day.stage?.heatMax != null && (day.weather.tMax ?? -99) >= day.stage.heatMax)
@@ -655,8 +665,8 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
       kind: "heat",
       severity: peak >= (stage.heatMax ?? 0) + 2 ? "warning" : "watch",
       dates: group,
-      title: `Heat stress at ${stage.name.toLowerCase()}`,
-      detail: `Up to ${Math.round(peak)} °C, above the ${stage.heatMax} °C that ${crop.name.toLowerCase()} tolerates at this stage. Irrigate the evening before if the soil is dry.`,
+      title: tr.t("alert.heatTitle", { stage: tr.lower(stageName(crop, stage, tr)) }),
+      detail: tr.t("alert.heat", { temp: Math.round(peak), max: stage.heatMax ?? 0, crop: name }),
     })
   }
 
@@ -667,8 +677,8 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
       kind: "cold",
       severity: low <= 0 ? "warning" : "watch",
       dates: group,
-      title: "Frost risk",
-      detail: `Night temperature down to ${Math.round(low)} °C. Irrigate lightly in the evening; moist soil holds heat through the night. Cover nurseries with straw or sheeting.`,
+      title: tr.t("alert.coldTitle"),
+      detail: tr.t("alert.cold", { temp: Math.round(low) }),
     })
   }
 
@@ -682,8 +692,14 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
         kind: "disease",
         severity: group.length >= 2 ? "warning" : "watch",
         dates: group,
-        title: `${disease.name} weather`,
-        detail: `${group.length >= 2 ? "Several" : "A"} humid day${group.length >= 2 ? "s" : ""} at ${disease.tMin}–${disease.tMax} °C favour${group.length >= 2 ? "" : "s"} ${disease.name.toLowerCase()}. ${disease.scout}`,
+        diseaseId: disease.id,
+        title: tr.t("alert.diseaseTitle", { disease: diseaseName(crop, disease, tr) }),
+        detail: tr.t(group.length >= 2 ? "alert.diseaseMany" : "alert.diseaseOne", {
+          low: disease.tMin,
+          high: disease.tMax,
+          disease: tr.lower(diseaseName(crop, disease, tr)),
+          scout: diseaseScout(crop, disease, tr),
+        }),
       })
     }
   }
@@ -695,8 +711,8 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
       kind: "wind",
       severity: gust >= 60 ? "warning" : "watch",
       dates: group,
-      title: "Strong wind can flatten the crop",
-      detail: `Gusts up to ${Math.round(gust)} km/h. Do not irrigate just before the wind; wet soil makes lodging worse.`,
+      title: tr.t("alert.windTitle"),
+      detail: tr.t("alert.wind", { gust: Math.round(gust) }),
     })
   }
 
@@ -707,8 +723,11 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
       kind: "rain",
       severity: chance >= 0.25 ? "warning" : "watch",
       dates: group,
-      title: "Heavy rain possible",
-      detail: `${chance > 0 ? `About ${Math.round(chance * 10)} in 10 ensemble runs show 65 mm or more in a day. ` : ""}Clear field drains and keep harvested produce covered.`,
+      title: tr.t("alert.rainTitle"),
+      detail:
+        chance > 0
+          ? `${tr.t("alert.rainChance", { n: Math.round(chance * 10) })} ${tr.t("alert.rainAction")}`
+          : tr.t("alert.rainAction"),
     })
   }
 
@@ -721,8 +740,8 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
       kind: "air",
       severity: worst.aqi!.value > 300 ? "warning" : "watch",
       dates: group,
-      title: `${worst.aqi!.category} air quality`,
-      detail: `Estimated AQI ${worst.aqi!.value}, mostly from ${worst.aqi!.dominant}. Field workers should wear N95 masks for long shifts, and older people and children should limit hard outdoor work.`,
+      title: tr.t("alert.airTitle", { category: tr.t(`aqi.${worst.aqi!.category}`) }),
+      detail: tr.t("alert.air", { aqi: worst.aqi!.value, pollutant: worst.aqi!.dominant }),
     })
   }
 
@@ -733,8 +752,8 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
         kind: "ozone",
         severity: "watch",
         dates: group,
-        title: "High afternoon ozone",
-        detail: `Ground-level ozone enters leaves and slows growth. ${crop.name} is ${crop.ozone === "high" ? "among the more sensitive crops" : "moderately sensitive"}. There is no field treatment; it is context for yield, not a reason to change today's work.`,
+        title: tr.t("alert.ozoneTitle"),
+        detail: tr.t(crop.ozone === "high" ? "alert.ozoneHigh" : "alert.ozoneMedium", { crop: cropName(crop, tr) }),
       })
     }
   }
@@ -748,27 +767,32 @@ function buildAlerts(crop: Crop, days: DayPlan[], point: FarmPoint): FarmAlert[]
   )
 }
 
-function buildInsights(plan: FarmPlan, point: FarmPoint): string[] {
+function buildInsights(plan: FarmPlan, point: FarmPoint, tr: Translator): string[] {
   const insights: string[] = []
   const { crop, stageToday, dasToday, days } = plan
   const pick = (id: ActivityId) => plan.best.find((item) => item.activity === id)
+  const name = tr.lower(cropName(crop, tr))
+  const stageWord = (stage: Stage) => tr.lower(stageName(crop, stage, tr))
 
   if (stageToday && dasToday != null) {
     insights.push(
-      `Your ${crop.name.toLowerCase()} is at ${stageToday.name.toLowerCase()}, day ${dasToday} after ${crop.startLabel}. ${stageToday.focus}`,
+      tr.t("insight.stage", {
+        crop: name,
+        stage: stageWord(stageToday),
+        das: dasToday,
+        start: tr.t(`start.${crop.startLabel}`),
+        focus: stageFocus(crop, stageToday, tr),
+      }),
     )
   } else if (plan.sownOn && dasToday != null && dasToday < 0) {
-    insights.push(`${crop.startLabel[0].toUpperCase()}${crop.startLabel.slice(1)} is planned for ${dayName(plan.sownOn)}.`)
+    insights.push(tr.t("insight.planned", { start: tr.t(`startTitle.${crop.startLabel}`), day: tr.day(plan.sownOn) }))
   } else {
     const sow = pick("sow")
     if (sow?.date) {
-      insights.push(
-        sow.verdict === "good"
-          ? `Best day to sow ${crop.name.toLowerCase()} this week: ${dayName(sow.date)}. ${sow.reason}`
-          : `${dayName(sow.date)} is the best of a mixed week for sowing. ${sow.reason}`,
-      )
+      const params = { crop: name, day: tr.day(sow.date), reason: sow.reason }
+      insights.push(tr.t(sow.verdict === "good" ? "insight.sowGood" : "insight.sowMixed", params))
     } else if (sow) {
-      insights.push(`No good sowing day this week. ${sow.reason}`)
+      insights.push(tr.t("insight.sowNone", { reason: sow.reason }))
     }
   }
 
@@ -782,55 +806,58 @@ function buildInsights(plan: FarmPlan, point: FarmPoint): string[] {
         day.activities.spray.verdict !== "avoid",
     )
     const window = usable[0]
-    const when = disease.dates[0] === days[0]?.date ? `through ${spanLabel(disease.dates).split(" – ").pop()}` : `from ${dayName(disease.dates[0])}`
+    const source = crop.diseases.find((item) => item.id === disease.diseaseId)
+    const params = { disease: source ? diseaseName(crop, source, tr) : disease.title, span: spanLabel(disease.dates, tr) }
     insights.push(
       window
-        ? `${disease.title} ${when}. Scout the field first; if it needs a spray, the earliest usable window is ${dayName(window.date)}, ${window.activities.spray!.window}.`
-        : `${disease.title} ${when}. Scout the field; there is no clean spray window in that spell.`,
+        ? tr.t("insight.diseaseWindow", { ...params, day: tr.day(window.date), window: window.activities.spray!.window ?? "" })
+        : tr.t("insight.diseaseNoWindow", params),
     )
   } else if (spray?.date) {
-    insights.push(`Best spray window: ${spray.text}. ${spray.reason}`)
+    insights.push(tr.t("insight.spray", { when: spray.text, reason: spray.reason }))
   }
 
   const fertilise = pick("fertilise")
-  if (fertilise?.date && stageToday?.nitrogen) {
-    insights.push(`${stageToday.nitrogen} Best day: ${dayName(fertilise.date)}. ${fertilise.reason}`)
+  const nitrogen = stageToday ? stageNitrogen(crop, stageToday, tr) : null
+  if (fertilise?.date && nitrogen) {
+    insights.push(tr.t("insight.fertilise", { nitrogen, day: tr.day(fertilise.date), reason: fertilise.reason }))
   } else if (plan.nextStage?.stage.nitrogen && plan.nextStage.date <= days[days.length - 1]?.date) {
-    insights.push(`Nitrogen will be due from ${dayName(plan.nextStage.date)}, when the crop reaches ${plan.nextStage.stage.name.toLowerCase()}.`)
+    insights.push(tr.t("insight.nitrogenSoon", { day: tr.day(plan.nextStage.date), stage: stageWord(plan.nextStage.stage) }))
   }
 
   const irrigate = pick("irrigate")
   if (irrigate?.date && irrigate.verdict !== "none") {
-    insights.push(`Irrigation: ${irrigate.text}. ${irrigate.reason}`)
+    insights.push(tr.t("insight.irrigate", { when: irrigate.text, reason: irrigate.reason }))
   } else if (irrigate && stageToday?.irrigation !== "stop") {
-    insights.push("No irrigation needed this week on current soil moisture and forecast rain.")
+    insights.push(tr.t("insight.noIrrigation"))
   }
 
   const harvest = pick("harvest")
   if (harvest) {
-    insights.push(harvest.date ? `Best harvest day: ${harvest.text}. ${harvest.reason}` : `Harvest: ${harvest.text.toLowerCase()}. ${harvest.reason}`)
+    insights.push(
+      harvest.date
+        ? tr.t("insight.harvest", { when: harvest.text, reason: harvest.reason })
+        : tr.t("insight.harvestNone", { text: tr.lower(harvest.text), reason: harvest.reason }),
+    )
   }
 
   if (plan.nextStage && plan.nextStage.date > (days[days.length - 1]?.date ?? "") && stageToday) {
-    insights.push(`Next stage, ${plan.nextStage.stage.name.toLowerCase()}, starts about ${dayName(plan.nextStage.date)}.`)
+    insights.push(tr.t("insight.nextStage", { stage: stageWord(plan.nextStage.stage), day: tr.day(plan.nextStage.date) }))
   }
 
   const worst = plan.air.worst
   if (worst?.aqi && worst.aqi.value > 200) {
     const month = parseIso(worst.date).month
     const burningBelt = ["northwest", "gangetic"].includes(point.regionId) && (month === 10 || month === 11)
-    insights.push(
-      `Air quality reaches ${worst.aqi.category.toLowerCase()} on ${dayName(worst.date)} (PM2.5 about ${Math.round(worst.pm25 ?? 0)} µg/m³).${
-        burningBelt
-          ? " Smoke from paddy residue burning adds to this every October and November. Mulching straw with a Happy Seeder or Super Seeder, or treating it with the PUSA decomposer, avoids burning."
-          : ""
-      }`,
-    )
+    const line = tr.t("insight.air", {
+      category: tr.lower(tr.t(`aqi.${worst.aqi.category}`)),
+      day: tr.day(worst.date),
+      pm: Math.round(worst.pm25 ?? 0),
+    })
+    insights.push(burningBelt ? `${line} ${tr.t("insight.burning")}` : line)
   }
   const hazy = days.filter((day) => (day.air?.aod ?? 0) >= 1)
-  if (hazy.length >= 2) {
-    insights.push(`Thick haze on ${hazy.length} days cuts the sunlight reaching the crop and slows drying of harvested produce.`)
-  }
+  if (hazy.length >= 2) insights.push(tr.t("insight.haze", { n: hazy.length }))
 
   return insights
 }

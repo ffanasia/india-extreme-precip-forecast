@@ -137,6 +137,7 @@ describe("buildPlan", () => {
       sownOn: addDays(TODAY, -22),
       today: TODAY,
     })
+    assert.equal(rainy.days[0].activities.irrigate?.tag, "waitRain")
     assert.equal(rainy.days[0].activities.irrigate?.label, "Wait for rain")
   })
 
@@ -149,7 +150,7 @@ describe("buildPlan", () => {
     })
     const frost = plan.alerts.find((alert) => alert.kind === "cold")
     assert.deepEqual(frost?.dates, [addDays(TODAY, 2)])
-    assert.equal(plan.days[1].activities.irrigate?.label, "Evening")
+    assert.equal(plan.days[1].activities.irrigate?.tag, "frost")
   })
 
   it("switches to sowing advice before the crop is in the ground", () => {
