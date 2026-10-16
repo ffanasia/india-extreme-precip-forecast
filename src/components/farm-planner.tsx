@@ -155,17 +155,16 @@ export function FarmPlanner() {
 
   const annualRain = desk?.cities.find((city) => city.id === cityId)?.era5.meanAnnual ?? null
   const suggestions = useMemo(() => {
-    if (!cityId) return null
+    if (!cityId || !farm) return null
     const temps = plan?.days.map((day) => day.weather.tMean).filter((value): value is number => value != null) ?? []
     const meanTemp = temps.length ? temps.reduce((sum, value) => sum + value, 0) / temps.length : null
-    const month = Number((farm?.today ?? todayInKolkata()).slice(5, 7))
-    return suggestCrops(cityId, month, meanTemp, annualRain)
-  }, [annualRain, cityId, farm?.today, plan])
+    return suggestCrops(cityId, Number(farm.today.slice(5, 7)), meanTemp, annualRain)
+  }, [annualRain, cityId, farm, plan])
 
   const activeDate = plan?.days.some((day) => day.date === selectedDate) ? selectedDate : plan?.days[0]?.date ?? null
   const activeDay = plan?.days.find((day) => day.date === activeDate) ?? null
   const update = (patch: Partial<Setup>) => setSetup((current) => (current ? { ...current, ...patch } : current))
-  const today = farm?.today ?? todayInKolkata()
+  const today = farm?.today ?? null
   const cityRecord = CITIES.find((item) => item.id === cityId)
   const cityName = cityRecord ? placeName(cityRecord.id, cityRecord.name, tr) : null
   const startLabel = crop.startLabel
@@ -231,7 +230,7 @@ export function FarmPlanner() {
                 type="date"
                 className="h-10"
                 value={setup?.sown ?? ""}
-                max={addYears(today, 1)}
+                max={today ? addYears(today, 1) : undefined}
                 onChange={(event) => update({ sown: event.target.value })}
                 aria-label={tr.t(`field.${startLabel}`)}
               />
@@ -248,7 +247,7 @@ export function FarmPlanner() {
                 type="date"
                 className="h-10"
                 value={setup?.irrigated ?? ""}
-                max={today}
+                max={today ?? undefined}
                 onChange={(event) => update({ irrigated: event.target.value })}
                 aria-label={tr.t("farm.lastIrrigated")}
               />
@@ -306,7 +305,7 @@ export function FarmPlanner() {
 
             <div className="grid gap-5 lg:grid-cols-2">
               <Section title={tr.t("farm.stage")}>
-                <StageTimeline plan={plan} today={today} tr={tr} />
+                <StageTimeline plan={plan} today={farm.today} tr={tr} />
               </Section>
               <Section title={tr.t("farm.alerts")}>
                 <Alerts plan={plan} tr={tr} />
