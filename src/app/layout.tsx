@@ -35,19 +35,62 @@ const fraunces = Fraunces({
 })
 
 // Indic faces are only fetched when a page shows text in that script.
-const indic = { weight: ["400", "500", "600"], preload: false, display: "swap" } satisfies {
-  weight: ("400" | "500" | "600")[]
-  preload: boolean
-  display: "swap"
-}
-const devanagari = Noto_Sans_Devanagari({ ...indic, variable: "--font-deva", subsets: ["devanagari"] })
-const gujarati = Noto_Sans_Gujarati({ ...indic, variable: "--font-gujr", subsets: ["gujarati"] })
-const gurmukhi = Noto_Sans_Gurmukhi({ ...indic, variable: "--font-guru", subsets: ["gurmukhi"] })
-const bengali = Noto_Sans_Bengali({ ...indic, variable: "--font-beng", subsets: ["bengali"] })
-const tamil = Noto_Sans_Tamil({ ...indic, variable: "--font-taml", subsets: ["tamil"] })
-const telugu = Noto_Sans_Telugu({ ...indic, variable: "--font-telu", subsets: ["telugu"] })
-const kannada = Noto_Sans_Kannada({ ...indic, variable: "--font-knda", subsets: ["kannada"] })
-const malayalam = Noto_Sans_Malayalam({ ...indic, variable: "--font-mlym", subsets: ["malayalam"] })
+const devanagari = Noto_Sans_Devanagari({
+  variable: "--font-deva",
+  subsets: ["devanagari"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
+const gujarati = Noto_Sans_Gujarati({
+  variable: "--font-gujr",
+  subsets: ["gujarati"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
+const gurmukhi = Noto_Sans_Gurmukhi({
+  variable: "--font-guru",
+  subsets: ["gurmukhi"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
+const bengali = Noto_Sans_Bengali({
+  variable: "--font-beng",
+  subsets: ["bengali"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
+const tamil = Noto_Sans_Tamil({
+  variable: "--font-taml",
+  subsets: ["tamil"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
+const telugu = Noto_Sans_Telugu({
+  variable: "--font-telu",
+  subsets: ["telugu"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
+const kannada = Noto_Sans_Kannada({
+  variable: "--font-knda",
+  subsets: ["kannada"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
+const malayalam = Noto_Sans_Malayalam({
+  variable: "--font-mlym",
+  subsets: ["malayalam"],
+  weight: ["400", "500", "600"],
+  preload: false,
+  display: "swap",
+})
 
 const fontVariables = [plex, plexMono, fraunces, devanagari, gujarati, gurmukhi, bengali, tamil, telugu, kannada, malayalam]
   .map((font) => font.variable)
