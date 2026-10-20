@@ -1,0 +1,6 @@
+agent-tools
+data/cache
+data/raw
+node_modules
+.next
+.git
