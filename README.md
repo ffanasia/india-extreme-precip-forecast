@@ -57,7 +57,17 @@ On the same computer, open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
 To open it on a phone, run the app on your laptop, keep the phone on the same Wi-Fi, then visit `http://YOUR-LAPTOP-IP:43123` (on macOS: System Settings → Wi-Fi → Details; on Windows: `ipconfig`). Example: `http://192.168.1.12:43123/farm`. If the phone cannot connect, allow Node or port 43123 through the laptop firewall.
 
-This project is a private repo. There is no public website yet. Anyone you want to share with needs either a clone of the repo (and Node 20.9+) or a deployed HTTPS URL. Say if you want a public deploy.
+### Public HTTPS (any phone, any network)
+
+A live public URL is running for this session:
+
+- Farm planner: https://49410aacd39908.lhr.life/farm
+- Rain guide: https://49410aacd39908.lhr.life/simple
+- Detailed desk: https://49410aacd39908.lhr.life/
+
+Paste those into a phone browser. They work off your Wi-Fi. This tunnel stays up only while this Cursor agent VM is running; it is not a permanent domain.
+
+For a lasting public site, connect this repo to [Vercel](https://vercel.com) (Next.js) or [Render](https://render.com) / [Fly.io](https://fly.io) with the `Dockerfile` in the repo root. No API keys are required. Open-Meteo’s free tier is for non-commercial use; check their licence before a public commercial launch.
 
 `data/climatology.json` is committed, so a fresh clone works without rebuilding it. To refresh the ERA5 and CMIP6 layer, run `npm run climatology`; it makes about 30 large archive requests, writes raw responses to `data/raw/`, and reuses them on later runs. The desk caches the live ensemble and satellite pull for 30 minutes in `data/cache/`.
 
