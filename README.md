@@ -51,7 +51,13 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:43123](http://127.0.0.1:43123). The server listens on localhost only.
+On the same computer, open [http://127.0.0.1:43123](http://127.0.0.1:43123).
+
+`http://127.0.0.1:43123` only works on the machine that is running the server. Pasting it into a phone browser looks for a server on the phone, so it fails. The Cursor Preview button is the same idea: it opens the app on your desktop, not on the public internet, and not for other people.
+
+To open it on a phone, run the app on your laptop, keep the phone on the same Wi-Fi, then visit `http://YOUR-LAPTOP-IP:43123` (on macOS: System Settings → Wi-Fi → Details; on Windows: `ipconfig`). Example: `http://192.168.1.12:43123/farm`. If the phone cannot connect, allow Node or port 43123 through the laptop firewall.
+
+This project is a private repo. There is no public website yet. Anyone you want to share with needs either a clone of the repo (and Node 20.9+) or a deployed HTTPS URL. Say if you want a public deploy.
 
 `data/climatology.json` is committed, so a fresh clone works without rebuilding it. To refresh the ERA5 and CMIP6 layer, run `npm run climatology`; it makes about 30 large archive requests, writes raw responses to `data/raw/`, and reuses them on later runs. The desk caches the live ensemble and satellite pull for 30 minutes in `data/cache/`.
 
